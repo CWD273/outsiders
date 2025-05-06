@@ -253,3 +253,148 @@ function handleDisconnect(ws) {
         }
     }
 }
+// server/server.js (Continued)
+
+    // ... (previous code) ...
+
+    function handleStartGame(ws, data) {
+        const gameCode = ws.gameCode;
+        const lobby = lobbies[gameCode];
+        if (lobby && lobby.players.length > 1 && lobby.players.find(p => p.ws === ws)) { // Only creator can start
+            lobby.gameStarted = true;
+            lobby.currentPlayerIndex = 0; // Start with the first player who joined
+            lobby.board = Array(205).fill(null); // You might use this for special square markers later
+            lobby.playerPositions = {};
+            lobby.playerOrder = lobby.players.map(p => p.playerId); // Maintain order
+            lobby.players.forEach(player => {
+                lobby.playerPositions[player.playerId] = 0; // Start at square 0
+            });
+            lobby.finishOrder = []; // To track finishing order
+            broadcastGameStart(gameCode);
+        }
+    }
+
+    function broadcastGameStart(gameCode) {
+        const lobby = lobbies[gameCode];
+        if (lobby) {
+            lobby.players.forEach(player => {
+                player.ws.send(JSON.stringify({
+                    type: 'gameStarted',
+                    playerOrder: lobby.playerOrder,
+                    initialPositions: lobby.playerPositions
+                }));
+            });
+            sendCurrentPlayerTurn(gameCode);
+        }
+    }
+
+    function sendCurrentPlayerTurn(gameCode) {
+        const lobby = lobbies[gameCode];
+        if (lobby && lobby.gameStarted && lobby.playerOrder[lobby.currentPlayerIndex]) {
+            const currentPlayerId = lobby.playerOrder[lobby.currentPlayerIndex];
+            lobby.players.forEach(player => {
+                player.ws.send(JSON.stringify({ type: 'currentPlayer', playerId: currentPlayerId }));
+            });
+        }
+    }
+
+    function handleRollDice(ws, data) {
+        const gameCode = ws.gameCode;
+        const lobby = lobbies[gameCode];
+        const playerId = data.playerId;
+
+        if (lobby && lobby.gameStarted && lobby.playerOrder[lobby.currentPlayerIndex] === playerId) {
+            const roll = Math.floor(Math.random() * 6) + 1;
+            lobby.playerPositions[playerId] += roll;
+            broadcastDiceRoll(gameCode, playerId, roll, lobby.playerPositions);
+
+            const newPosition = lobby.playerPositions[playerId];
+            if (newPosition >= 205) {
+                handlePlayerWin(gameCode, playerId);
+            } else if ((newPosition + 1) % 10 === 0 && newPosition !== 0 && newPosition < 200) {
+                sendTriviaQuestion(gameCode, playerId);
+            } else {
+                advanceTurn(gameCode);
+            }
+        }
+    }
+
+    function broadcastDiceRoll(gameCode, playerId, roll, playerPositions) {
+        const lobby = lobbies[gameCode];
+        if (lobby) {
+            lobby.players.forEach(player => {
+                player.ws.send(JSON.stringify({ type: 'diceRolled', playerId, roll, playerPositions }));
+            });
+        }
+    }
+
+    // Placeholder for trivia questions - replace with your actual data source
+    const triviaQuestions = [
+        { text: "What is the capital of France?", answer: "Paris" },
+        { text: "What is 2 + 2?", answer: "4" },
+        // ... more questions
+    ];
+
+    function getRandomTriviaQuestion() {
+        return triviaQuestions[Math.floor(Math.random() * triviaQuestions.length)];
+    }
+
+    function sendTriviaQuestion(gameCode, playerId) {
+        const lobby = lobbies[gameCode];
+        if (lobby) {
+            const question = getRandomTriviaQuestion();
+            const player = lobby.players.find(p => p.playerId === playerId);
+            if (player) {
+                player.ws.send(JSON.stringify({ type: 'triviaQuestion', questionText: question.text }));
+                lobby.currentQuestion = { question, playerId };
+            }
+        }
+    }
+
+    function handleAnswerTrivia(ws, data) {
+        const gameCode = ws.gameCode;
+        const lobby = lobbies[gameCode];
+
+        if (lobby && lobby.currentQuestion && lobby.currentQuestion.playerId === data.playerId) {
+            const isCorrect = data.answer.trim().toLowerCase() === lobby.currentQuestion.question.answer.toLowerCase();
+            ws.send(JSON.stringify({ type: 'triviaResult', correct: isCorrect, correctAnswer: lobby.currentQuestion.question.answer }));
+            lobby.currentQuestion = null;
+
+            // Advance turn regardless of the answer for this basic implementation
+            advanceTurn(gameCode);
+        }
+    }
+
+    function handlePlayerWin(gameCode, playerId) {
+        const lobby = lobbies[gameCode];
+        if (lobby && !lobby.finishOrder.includes(playerId)) {
+            lobby.finishOrder.push(playerId);
+            lobby.players.forEach(player => {
+                player.ws.send(JSON.stringify({ type: 'playerWon', winnerId: playerId, finishOrder: lobby.finishOrder }));
+            });
+            if (lobby.finishOrder.length === lobby.players.length) {
+                // Game over, show podium
+                broadcastPodium(gameCode);
+            }
+        }
+    }
+
+    function broadcastPodium(gameCode) {
+        const lobby = lobbies[gameCode];
+        if (lobby) {
+            const podiumPlayers = lobby.finishOrder.slice(0, 3).map(id => lobby.players.find(p => p.playerId === id));
+            lobby.players.forEach(player => {
+                player.ws.send(JSON.stringify({ type: 'showPodium', podiumPlayers }));
+            });
+        }
+    }
+
+    function advanceTurn(gameCode) {
+        const lobby = lobbies[gameCode];
+        if (lobby && lobby.gameStarted) {
+            lobby.currentPlayerIndex = (lobby.currentPlayerIndex + 1) % lobby.playerOrder.length;
+            sendCurrentPlayerTurn(gameCode);
+        }
+    }
+
+    // ... (handleDisconnect function remains the same) ...
