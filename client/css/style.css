@@ -2,7 +2,7 @@
 body {
     font-family: sans-serif;
     display: flex;
-    flex-direction: column;
+    justify-content: center;
     align-items: center;
     min-height: 100vh;
     margin: 0;
@@ -15,60 +15,6 @@ body {
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     text-align: center;
-    margin-bottom: 20px;
-}
-
-.icon-selector {
-    margin-bottom: 10px;
-}
-
-#lobby-players-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); /* Responsive grid */
-    gap: 10px;
-    margin-top: 20px;
-}
-
-.player-icon-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    padding: 5px;
-    border: 1px solid #eee;
-    border-radius: 4px;
-}
-
-.player-icon {
-    width: 50px;
-    height: 50px;
-    margin-bottom: 5px;
-}
-
-.player-username-lobby {
-    font-size: 0.8em;
-}
-
-#leaderboard {
-    background-color: white;
-    padding: 10px;
-    border-radius: 4px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-    margin-bottom: 20px;
-    text-align: left;
-}
-
-#leaderboard h2 {
-    margin-top: 0;
-}
-
-#leaderboard ul {
-    list-style: none;
-    padding: 0;
-}
-
-#leaderboard li {
-    margin-bottom: 5px;
 }
 
 #board-container {
@@ -87,8 +33,7 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    font-size: 0.7em;
-    position: relative; /* For positioning player pieces */
+    font-size: 0.8em;
 }
 
 .special-square {
@@ -96,76 +41,30 @@ body {
 }
 
 .player-piece {
+    border-radius: 50%;
     width: 30px;
     height: 30px;
     position: absolute;
-    /* Adjust positioning as needed */
-}
-
-#game-controls {
-    margin-top: 20px;
-    padding: 15px;
-    background-color: white;
-    border-radius: 4px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-    text-align: center;
-}
-
-#finish-message {
-    margin-top: 20px;
-    padding: 15px;
-    background-color: lightgreen;
-    border-radius: 4px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-    font-weight: bold;
-}
-
-#podium-screen {
-    /* Style the podium as needed */
-}
-
-#podium {
-    display: flex;
-    justify-content: space-around;
-    align-items: flex-end;
-    margin-bottom: 20px;
-}
-
-.podium-place {
-    text-align: center;
-}
-
-.podium-piece {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    margin-bottom: 5px;
     display: flex;
     justify-content: center;
     align-items: center;
+    font-size: 0.6em;
     color: white;
-    font-weight: bold;
 }
 
-/* Basic button styling */
-button {
-    padding: 10px 15px;
-    margin: 5px;
-    border: none;
+#leaderboard {
+    position: absolute;
+    left: 20px;
+    top: 20px;
+    background-color: white;
+    padding: 10px;
     border-radius: 4px;
-    background-color: #007bff;
-    color: white;
-    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
-button:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
+#leaderboard ul {
+    list-style: none;
+    padding: 0;
 }
 
-input[type="text"], select {
-    padding: 8px;
-    margin: 5px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-}
+#leaderboard li {
