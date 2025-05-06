@@ -273,3 +273,91 @@ newGameButton.addEventListener('click', () => {
 
 // --- Initialization ---
 connectWebSocket();
+// client/js/script.js (Continued)
+
+    // ... (previous JavaScript code) ...
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        console.log('Received message:', data);
+
+        switch (data.type) {
+            // ... (lobby related cases remain the same) ...
+            case 'gameStarted':
+                playerId = localStorage.getItem('playerId');
+                if (!playerId) {
+                    console.error('Player ID not found after game started.');
+                    return;
+                }
+                playerPositions = data.initialPositions;
+                initializeBoard(playerPositions);
+                updateLeaderboard(data.initialPositions, playersInLobby);
+                lobbyScreen.style.display = 'none';
+                gameScreen.style.display = 'block';
+                break;
+            case 'currentPlayer':
+                currentPlayerId = data.playerId;
+                if (currentPlayerId === playerId) {
+                    rollDiceButton.disabled = false;
+                } else {
+                    rollDiceButton.disabled = true;
+                }
+                break;
+            case 'diceRolled':
+                playerPositions = data.playerPositions;
+                updateBoard(playerPositions);
+                updateLeaderboard(playerPositions, playersInLobby);
+                diceResultDiv.textContent = `You rolled a ${data.roll}`;
+                triviaQuestionDiv.textContent = '';
+                triviaAnswerInput.value = '';
+                triviaResultDiv.textContent = '';
+                break;
+            case 'triviaQuestion':
+                triviaQuestionDiv.textContent = data.questionText;
+                break;
+            case 'triviaResult':
+                triviaResultDiv.textContent = data.correct ? 'Correct!' : `Incorrect. The answer was: ${data.correctAnswer}`;
+                break;
+            case 'playerWon':
+                const finishMessage = data.winnerId === playerId ? `You finished in ${data.finishOrder.indexOf(playerId) + 1} place!` : `${playersInLobby.find(p => p.playerId === data.winnerId)?.username} won! You finished in ${data.finishOrder.indexOf(playerId) + 1} place.`;
+                finishMessageDiv.textContent = finishMessage;
+                finishMessageDiv.style.display = 'block';
+                break;
+            case 'showPodium':
+                gameScreen.style.display = 'none';
+                podiumScreen.style.display = 'block';
+                displayPodium(data.podiumPlayers);
+                break;
+        }
+    };
+
+    // ... (lobby and board functions remain mostly the same) ...
+
+    // --- Podium Display ---
+    function displayPodium(podiumPlayers) {
+        podiumDiv.innerHTML = '';
+        podiumPlayers.forEach((player, index) => {
+            if (player) {
+                const placeDiv = document.createElement('div');
+                placeDiv.classList.add('podium-place');
+                const pieceDiv = document.createElement('div');
+                pieceDiv.classList.add('podium-piece');
+                pieceDiv.style.backgroundColor = player.pieceColor;
+                pieceDiv.textContent = player.username.substring(0, 2).toUpperCase();
+                const nameDiv = document.createElement('div');
+                nameDiv.textContent = player.username;
+                const rankDiv = document.createElement('div');
+                rankDiv.textContent = `#${index + 1}`;
+
+                placeDiv.appendChild(pieceDiv);
+                placeDiv.appendChild(nameDiv);
+                placeDiv.appendChild(rankDiv);
+                podiumDiv.appendChild(placeDiv);
+            }
+        });
+    }
+
+    // ... (game play and new game functions remain mostly the same) ...
+
+    // --- Initialization ---
+    connectWebSocket();
