@@ -1,15 +1,13 @@
-// client/js/script.js
-
 const lobbyScreen = document.getElementById('lobby-screen');
 const gameScreen = document.getElementById('game-screen');
 const podiumScreen = document.getElementById('podium-screen');
 
 const usernameInput = document.getElementById('username');
-const pieceColorInput = document.getElementById('piece-color');
+const pieceIconSelect = document.getElementById('piece-icon');
 const gameCodeJoinInput = document.getElementById('game-code-join');
 const joinButton = document.getElementById('join-button');
 const createButton = document.getElementById('create-button');
-const lobbyPlayersDiv = document.getElementById('lobby-players');
+const lobbyPlayersGrid = document.getElementById('lobby-players-grid');
 const startGameButton = document.getElementById('start-game-button');
 const lobbyErrorDiv = document.getElementById('lobby-error');
 
@@ -32,10 +30,11 @@ let playersInLobby = [];
 let boardSquares = [];
 let playerPositions = {};
 let currentPlayerId;
+const maxPlayers = 16;
 
 // --- WebSocket Connection ---
 function connectWebSocket() {
-    const backendUrl = 'https://outsiders-49p8.onrender.com'; // Replace with your Render backend URL
+    const backendUrl = 'YOUR_RENDER_BACKEND_URL'; // Replace with your Render backend URL
     const websocketUrl = backendUrl.replace(/^http(s?):\/\//, 'ws$1://');
 
     ws = new WebSocket(websocketUrl);
@@ -45,6 +44,7 @@ function connectWebSocket() {
         lobbyScreen.style.display = 'block';
         gameScreen.style.display = 'none';
         podiumScreen.style.display = 'none';
+        populateIconSelector();
     };
 
     ws.onmessage = (event) => {
@@ -64,225 +64,6 @@ function connectWebSocket() {
             case 'lobbyError':
                 lobbyErrorDiv.textContent = data.message;
                 break;
-            case 'gameStarted':
-                playerId = localStorage.getItem('playerId'); // Retrieve playerId
-                if (!playerId) {
-                    // Handle case where playerId is not stored (shouldn't happen normally)
-                    console.error('Player ID not found after game started.');
-                    return;
-                }
-                playerPositions = data.initialPositions;
-                initializeBoard(playerPositions);
-                updateLeaderboard(data.initialPositions, playersInLobby);
-                lobbyScreen.style.display = 'none';
-                gameScreen.style.display = 'block';
-                break;
-            case 'currentPlayer':
-                currentPlayerId = data.playerId;
-                if (currentPlayerId === playerId) {
-                    rollDiceButton.disabled = false;
-                } else {
-                    rollDiceButton.disabled = true;
-                }
-                break;
-            case 'diceRolled':
-                playerPositions = data.playerPositions;
-                updateBoard(playerPositions);
-                updateLeaderboard(playerPositions, playersInLobby);
-                diceResultDiv.textContent = `You rolled a ${data.roll}`;
-                triviaQuestionDiv.textContent = '';
-                triviaAnswerInput.value = '';
-                triviaResultDiv.textContent = '';
-                break;
-            case 'triviaQuestion':
-                triviaQuestionDiv.textContent = data.questionText;
-                break;
-            case 'triviaResult':
-                triviaResultDiv.textContent = data.correct ? 'Correct!' : `Incorrect. The answer was: ${data.correctAnswer}`;
-                break;
-            case 'playerWon':
-                finishMessageDiv.textContent = data.winnerId === playerId ? 'You Won!' : `${playersInLobby.find(p => p.playerId === data.winnerId)?.username} won!`;
-                finishMessageDiv.style.display = 'block';
-                // Implement logic to show podium
-                break;
-            // ... handle other game events (podium display, etc.)
-        }
-    };
-
-    ws.onclose = () => {
-        console.log('WebSocket connection closed.');
-        // Handle disconnection (e.g., show a message to the user)
-    };
-
-    ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-    };
-}
-
-// --- Lobby Functions ---
-joinButton.addEventListener('click', () => {
-    const username = usernameInput.value.trim();
-    const pieceColor = pieceColorInput.value;
-    const gameCodeToJoin = gameCodeJoinInput.value.trim().toUpperCase();
-
-    if (username) {
-        localStorage.setItem('username', username); // Store username
-        localStorage.setItem('pieceColor', pieceColor); // Store color
-        ws.send(JSON.stringify({
-            type: 'joinGame',
-            gameCode: gameCodeToJoin,
-            username: username,
-            pieceColor: pieceColor
-        }));
-    } else {
-        lobbyErrorDiv.textContent = 'Please enter a username.';
-    }
-});
-
-createButton.addEventListener('click', () => {
-    const username = usernameInput.value.trim();
-    const pieceColor = pieceColorInput.value;
-
-    if (username) {
-        localStorage.setItem('username', username); // Store username
-        localStorage.setItem('pieceColor', pieceColor); // Store color
-        ws.send(JSON.stringify({
-            type: 'createGame',
-            username: username,
-            pieceColor: pieceColor
-        }));
-    } else {
-        lobbyErrorDiv.textContent = 'Please enter a username.';
-    }
-});
-
-function updateLobbyPlayers(players) {
-    lobbyPlayersDiv.innerHTML = '<h3>Players in Lobby:</h3>';
-    if (players.length > 0) {
-        const ul = document.createElement('ul');
-        players.forEach(player => {
-            const li = document.createElement('li');
-            li.textContent = `${player.username} (${player.pieceColor})`;
-            ul.appendChild(li);
-        });
-        lobbyPlayersDiv.appendChild(ul);
-    }
-    // Enable start button only for the creator when there are other players
-    const storedUsername = localStorage.getItem('username');
-    const isCreator = players.some(p => p.username === storedUsername && playersInLobby.length > 1);
-    startGameButton.style.display = isCreator ? 'block' : 'none';
-}
-
-startGameButton.addEventListener('click', () => {
-    ws.send(JSON.stringify({ type: 'startGame' }));
-});
-
-// --- Game Board Functions ---
-function initializeBoard(initialPositions) {
-    boardContainer.innerHTML = '';
-    boardSquares = [];
-    for (let i = 0; i < 205; i++) {
-        const square = document.createElement('div');
-        square.classList.add('square');
-        square.textContent = i;
-        if ((i + 1) % 10 === 0 && i !== 0 && i < 200) {
-            square.classList.add('special-square');
-        }
-        boardContainer.appendChild(square);
-        boardSquares.push(square);
-    }
-    updateBoard(initialPositions);
-}
-
-function updateBoard(currentPositions) {
-    // Clear previous player positions
-    boardSquares.forEach(square => {
-        const pieces = square.querySelectorAll('.player-piece');
-        pieces.forEach(piece => piece.remove());
-    });
-
-    playersInLobby.forEach(player => {
-        const position = currentPositions[player.playerId];
-        if (position >= 0 && position < boardSquares.length) {
-            const square = boardSquares[position];
-            const piece = document.createElement('div');
-            piece.classList.add('player-piece');
-            piece.style.backgroundColor = player.pieceColor;
-            piece.textContent = player.username.substring(0, 2).toUpperCase(); // Display initials
-            square.style.position = 'relative'; // Ensure positioning context
-            piece.style.left = `${Math.random() * 60 + 10}%`; // Simple random offset
-            piece.style.top = `${Math.random() * 60 + 10}%`;
-            square.appendChild(piece);
-        } else if (position >= boardSquares.length) {
-            // Player finished (visual indication if needed)
-        }
-    });
-}
-
-// --- Leaderboard Functions ---
-function updateLeaderboard(positions, players) {
-    leaderboardUl.innerHTML = '';
-    const sortedPlayers = players.sort((a, b) => (positions[b.playerId] || 0) - (positions[a.playerId] || 0));
-    sortedPlayers.forEach(player => {
-        const li = document.createElement('li');
-        li.textContent = `${player.username}: ${positions[player.playerId] || 0}`;
-        const colorSpan = document.createElement('span');
-        colorSpan.style.backgroundColor = player.pieceColor;
-        colorSpan.style.display = 'inline-block';
-        colorSpan.style.width = '10px';
-        colorSpan.style.height = '10px';
-        colorSpan.style.borderRadius = '50%';
-        colorSpan.style.marginRight = '5px';
-        li.prepend(colorSpan);
-        leaderboardUl.appendChild(li);
-    });
-}
-
-// --- Game Play Functions ---
-rollDiceButton.addEventListener('click', () => {
-    if (currentPlayerId === playerId) {
-        ws.send(JSON.stringify({ type: 'rollDice', playerId: playerId }));
-        rollDiceButton.disabled = true;
-    }
-});
-
-submitAnswerButton.addEventListener('click', () => {
-    const answer = triviaAnswerInput.value.trim();
-    if (answer && triviaQuestionDiv.textContent) {
-        ws.send(JSON.stringify({ type: 'answerTrivia', playerId: playerId, answer: answer }));
-    }
-});
-
-// --- Podium and New Game ---
-// Implement logic to display the podium with top 3 players
-
-newGameButton.addEventListener('click', () => {
-    localStorage.removeItem('gameCode'); // Clear any stored game code
-    lobbyScreen.style.display = 'block';
-    gameScreen.style.display = 'none';
-    podiumScreen.style.display = 'none';
-    finishMessageDiv.style.display = 'none';
-    lobbyErrorDiv.textContent = '';
-    playersInLobby = [];
-    updateLobbyPlayers(playersInLobby);
-    // Optionally, you might want to reconnect the WebSocket if it was closed.
-    if (ws.readyState === WebSocket.CLOSED) {
-        connectWebSocket();
-    }
-});
-
-// --- Initialization ---
-connectWebSocket();
-// client/js/script.js (Continued)
-
-    // ... (previous JavaScript code) ...
-
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        console.log('Received message:', data);
-
-        switch (data.type) {
-            // ... (lobby related cases remain the same) ...
             case 'gameStarted':
                 playerId = localStorage.getItem('playerId');
                 if (!playerId) {
@@ -331,33 +112,218 @@ connectWebSocket();
         }
     };
 
-    // ... (lobby and board functions remain mostly the same) ...
+    ws.onclose = () => {
+        console.log('WebSocket connection closed.');
+        // Handle disconnection (e.g., show a message to the user)
+    };
 
-    // --- Podium Display ---
-    function displayPodium(podiumPlayers) {
-        podiumDiv.innerHTML = '';
-        podiumPlayers.forEach((player, index) => {
-            if (player) {
-                const placeDiv = document.createElement('div');
-                placeDiv.classList.add('podium-place');
-                const pieceDiv = document.createElement('div');
-                pieceDiv.classList.add('podium-piece');
-                pieceDiv.style.backgroundColor = player.pieceColor;
-                pieceDiv.textContent = player.username.substring(0, 2).toUpperCase();
-                const nameDiv = document.createElement('div');
-                nameDiv.textContent = player.username;
-                const rankDiv = document.createElement('div');
-                rankDiv.textContent = `#${index + 1}`;
+    ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+    };
+}
 
-                placeDiv.appendChild(pieceDiv);
-                placeDiv.appendChild(nameDiv);
-                placeDiv.appendChild(rankDiv);
-                podiumDiv.appendChild(placeDiv);
-            }
+// --- Lobby Functions ---
+function populateIconSelector() {
+    pieceIconSelect.innerHTML = '';
+    for (let i = 1; i <= 16; i++) {
+        const option = document.createElement('option');
+        option.value = `icon/${i}.png`;
+        option.textContent = `Icon ${i}`;
+        pieceIconSelect.appendChild(option);
+    }
+}
+
+joinButton.addEventListener('click', () => {
+    const username = usernameInput.value.trim();
+    const pieceIcon = pieceIconSelect.value;
+    const gameCodeToJoin = gameCodeJoinInput.value.trim().toUpperCase();
+
+    if (username) {
+        localStorage.setItem('username', username);
+        localStorage.setItem('pieceIcon', pieceIcon);
+        lobbyErrorDiv.textContent = 'Attempting to join game...';
+        ws.send(JSON.stringify({
+            type: 'joinGame',
+            gameCode: gameCodeToJoin,
+            username: username,
+            pieceIcon: pieceIcon
+        }));
+    } else {
+        lobbyErrorDiv.textContent = 'Please enter a username.';
+    }
+});
+
+createButton.addEventListener('click', () => {
+    const username = usernameInput.value.trim();
+    const pieceIcon = pieceIconSelect.value;
+
+    if (username) {
+        localStorage.setItem('username', username);
+        localStorage.setItem('pieceIcon', pieceIcon);
+        ws.send(JSON.stringify({
+            type: 'createGame',
+            username: username,
+            pieceIcon: pieceIcon
+        }));
+    } else {
+        lobbyErrorDiv.textContent = 'Please enter a username.';
+    }
+});
+
+function updateLobbyPlayers(players) {
+    lobbyPlayersGrid.innerHTML = '';
+    if (players.length > 0) {
+        players.forEach(player => {
+            const playerContainer = document.createElement('div');
+            playerContainer.classList.add('player-icon-container');
+
+            const iconImg = document.createElement('img');
+            iconImg.src = player.pieceIcon;
+            iconImg.alt = player.username;
+            iconImg.classList.add('player-icon');
+
+            const usernameDiv = document.createElement('div');
+            usernameDiv.classList.add('player-username-lobby');
+            usernameDiv.textContent = player.username;
+
+            playerContainer.appendChild(iconImg);
+            playerContainer.appendChild(usernameDiv);
+            lobbyPlayersGrid.appendChild(playerContainer);
         });
     }
+    const storedUsername = localStorage.getItem('username');
+    const isCreator = players.some(p => p.username === storedUsername && players.length > 1);
+    startGameButton.style.display = isCreator && players.length <= maxPlayers ? 'block' : 'none';
+    if (players.length >= maxPlayers) {
+        lobbyErrorDiv.textContent = 'Lobby is full (16 players).';
+        joinButton.disabled = true;
+        createButton.disabled = true;
+    } else {
+        lobbyErrorDiv.textContent = '';
+        joinButton.disabled = false;
+        createButton.disabled = false;
+    }
+}
 
-    // ... (game play and new game functions remain mostly the same) ...
+startGameButton.addEventListener('click', () => {
+    ws.send(JSON.stringify({ type: 'startGame' }));
+});
 
-    // --- Initialization ---
-    connectWebSocket();
+// --- Game Board Functions ---
+function initializeBoard(initialPositions) {
+    boardContainer.innerHTML = '';
+    boardSquares = [];
+    for (let i = 0; i < 205; i++) {
+        const square = document.createElement('div');
+        square.classList.add('square');
+        square.textContent = i;
+        if ((i + 1) % 10 === 0 && i !== 0 && i < 200) {
+            square.classList.add('special-square');
+        }
+        boardContainer.appendChild(square);
+        boardSquares.push(square);
+    }
+    updateBoard(initialPositions);
+}
+
+function updateBoard(currentPositions) {
+    boardSquares.forEach(square => {
+        const pieces = square.querySelectorAll('.player-piece');
+        pieces.forEach(piece => piece.remove());
+    });
+
+    playersInLobby.forEach(player => {
+        const position = currentPositions[player.playerId];
+        if (position >= 0 && position < boardSquares.length) {
+            const square = boardSquares[position];
+            const piece = document.createElement('img');
+            piece.classList.add('player-piece');
+            piece.src = player.pieceIcon;
+            piece.alt = player.username;
+            square.style.position = 'relative';
+            piece.style.width = '30px';
+            piece.style.height = '30px';
+            piece.style.position = 'absolute';
+            piece.style.left = `${Math.random() * 60 + 10}%`;
+            piece.style.top = `${Math.random() * 60 + 10}%`;
+            square.appendChild(piece);
+        } else if (position >= boardSquares.length) {
+            // Player finished
+        }
+    });
+}
+
+// --- Leaderboard Functions ---
+function updateLeaderboard(positions, players) {
+    leaderboardUl.innerHTML = '';
+    const sortedPlayers = players.sort((a, b) => (positions[b.playerId] || 0) - (positions[a.playerId] || 0));
+    sortedPlayers.forEach(player => {
+        const li = document.createElement('li');
+        li.textContent = `${player.username}: ${positions[player.playerId] || 0}`;
+        const iconImg = document.createElement('img');
+        iconImg.src= player.pieceIcon;
+        iconImg.style.width = '16px';  // Adjust size as needed
+        iconImg.style.height = '16px';
+        iconImg.style.marginRight = '5px';
+        li.prepend(iconImg);
+        leaderboardUl.appendChild(li);
+    });
+}
+
+// --- Game Play Functions ---
+rollDiceButton.addEventListener('click', () => {
+    if (currentPlayerId === playerId) {
+        ws.send(JSON.stringify({ type: 'rollDice', playerId: playerId }));
+        rollDiceButton.disabled = true;
+    }
+});
+
+submitAnswerButton.addEventListener('click', () => {
+    const answer = triviaAnswerInput.value.trim();
+    if (answer && triviaQuestionDiv.textContent) {
+        ws.send(JSON.stringify({ type: 'answerTrivia', playerId: playerId, answer: answer }));
+    }
+});
+
+// --- Podium and New Game ---
+function displayPodium(podiumPlayers) {
+    podiumDiv.innerHTML = '';
+    podiumPlayers.forEach((player, index) => {
+        if (player) {
+            const placeDiv = document.createElement('div');
+            placeDiv.classList.add('podium-place');
+            const pieceImg = document.createElement('img');
+            pieceImg.classList.add('podium-piece');
+            pieceImg.src = player.pieceIcon;
+            pieceImg.style.width = '40px';
+            pieceImg.style.height = '40px';
+            pieceImg.alt = player.username;
+            const nameDiv = document.createElement('div');
+            nameDiv.textContent = player.username;
+            const rankDiv = document.createElement('div');
+            rankDiv.textContent = `#${index + 1}`;
+
+            placeDiv.appendChild(pieceImg);
+            placeDiv.appendChild(nameDiv);
+            placeDiv.appendChild(rankDiv);
+            podiumDiv.appendChild(placeDiv);
+        }
+    });
+}
+
+newGameButton.addEventListener('click', () => {
+    localStorage.removeItem('gameCode');
+    lobbyScreen.style.display = 'block';
+    gameScreen.style.display = 'none';
+    podiumScreen.style.display = 'none';
+    finishMessageDiv.style.display = 'none';
+    lobbyErrorDiv.textContent = '';
+    playersInLobby = [];
+    updateLobbyPlayers(playersInLobby);
+    if (ws.readyState === WebSocket.CLOSED) {
+        connectWebSocket();
+    }
+});
+
+// --- Initialization ---
+connectWebSocket();
