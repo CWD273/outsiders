@@ -1,13 +1,15 @@
+// client/js/script.js
+
 const lobbyScreen = document.getElementById('lobby-screen');
 const gameScreen = document.getElementById('game-screen');
 const podiumScreen = document.getElementById('podium-screen');
 
 const usernameInput = document.getElementById('username');
-const pieceIconSelect = document.getElementById('piece-icon');
+const pieceColorInput = document.getElementById('piece-color');
 const gameCodeJoinInput = document.getElementById('game-code-join');
 const joinButton = document.getElementById('join-button');
 const createButton = document.getElementById('create-button');
-const lobbyPlayersGrid = document.getElementById('lobby-players-grid');
+const lobbyPlayersDiv = document.getElementById('lobby-players');
 const startGameButton = document.getElementById('start-game-button');
 const lobbyErrorDiv = document.getElementById('lobby-error');
 
@@ -30,7 +32,6 @@ let playersInLobby = [];
 let boardSquares = [];
 let playerPositions = {};
 let currentPlayerId;
-const maxPlayers = 16;
 
 // --- WebSocket Connection ---
 function connectWebSocket() {
@@ -44,7 +45,6 @@ function connectWebSocket() {
         lobbyScreen.style.display = 'block';
         gameScreen.style.display = 'none';
         podiumScreen.style.display = 'none';
-        populateIconSelector();
     };
 
     ws.onmessage = (event) => {
@@ -65,8 +65,9 @@ function connectWebSocket() {
                 lobbyErrorDiv.textContent = data.message;
                 break;
             case 'gameStarted':
-                playerId = localStorage.getItem('playerId');
+                playerId = localStorage.getItem('playerId'); // Retrieve playerId
                 if (!playerId) {
+                    // Handle case where playerId is not stored (shouldn't happen normally)
                     console.error('Player ID not found after game started.');
                     return;
                 }
@@ -100,15 +101,11 @@ function connectWebSocket() {
                 triviaResultDiv.textContent = data.correct ? 'Correct!' : `Incorrect. The answer was: ${data.correctAnswer}`;
                 break;
             case 'playerWon':
-                const finishMessage = data.winnerId === playerId ? `You finished in ${data.finishOrder.indexOf(playerId) + 1} place!` : `${playersInLobby.find(p => p.playerId === data.winnerId)?.username} won! You finished in ${data.finishOrder.indexOf(playerId) + 1} place.`;
-                finishMessageDiv.textContent = finishMessage;
+                finishMessageDiv.textContent = data.winnerId === playerId ? 'You Won!' : `${playersInLobby.find(p => p.playerId === data.winnerId)?.username} won!`;
                 finishMessageDiv.style.display = 'block';
+                // Implement logic to show podium
                 break;
-            case 'showPodium':
-                gameScreen.style.display = 'none';
-                podiumScreen.style.display = 'block';
-                displayPodium(data.podiumPlayers);
-                break;
+            // ... handle other game events (podium display, etc.)
         }
     };
 
@@ -123,30 +120,19 @@ function connectWebSocket() {
 }
 
 // --- Lobby Functions ---
-function populateIconSelector() {
-    pieceIconSelect.innerHTML = '';
-    for (let i = 1; i <= 16; i++) {
-        const option = document.createElement('option');
-        option.value = `icon/${i}.png`;
-        option.textContent = `Icon ${i}`;
-        pieceIconSelect.appendChild(option);
-    }
-}
-
 joinButton.addEventListener('click', () => {
     const username = usernameInput.value.trim();
-    const pieceIcon = pieceIconSelect.value;
+    const pieceColor = pieceColorInput.value;
     const gameCodeToJoin = gameCodeJoinInput.value.trim().toUpperCase();
 
     if (username) {
-        localStorage.setItem('username', username);
-        localStorage.setItem('pieceIcon', pieceIcon);
-        lobbyErrorDiv.textContent = 'Attempting to join game...';
+        localStorage.setItem('username', username); // Store username
+        localStorage.setItem('pieceColor', pieceColor); // Store color
         ws.send(JSON.stringify({
             type: 'joinGame',
             gameCode: gameCodeToJoin,
             username: username,
-            pieceIcon: pieceIcon
+            pieceColor: pieceColor
         }));
     } else {
         lobbyErrorDiv.textContent = 'Please enter a username.';
@@ -155,15 +141,15 @@ joinButton.addEventListener('click', () => {
 
 createButton.addEventListener('click', () => {
     const username = usernameInput.value.trim();
-    const pieceIcon = pieceIconSelect.value;
+    const pieceColor = pieceColorInput.value;
 
     if (username) {
-        localStorage.setItem('username', username);
-        localStorage.setItem('pieceIcon', pieceIcon);
+        localStorage.setItem('username', username); // Store username
+        localStorage.setItem('pieceColor', pieceColor); // Store color
         ws.send(JSON.stringify({
             type: 'createGame',
             username: username,
-            pieceIcon: pieceIcon
+            pieceColor: pieceColor
         }));
     } else {
         lobbyErrorDiv.textContent = 'Please enter a username.';
@@ -171,38 +157,20 @@ createButton.addEventListener('click', () => {
 });
 
 function updateLobbyPlayers(players) {
-    lobbyPlayersGrid.innerHTML = '';
+    lobbyPlayersDiv.innerHTML = '<h3>Players in Lobby:</h3>';
     if (players.length > 0) {
+        const ul = document.createElement('ul');
         players.forEach(player => {
-            const playerContainer = document.createElement('div');
-            playerContainer.classList.add('player-icon-container');
-
-            const iconImg = document.createElement('img');
-            iconImg.src = player.pieceIcon;
-            iconImg.alt = player.username;
-            iconImg.classList.add('player-icon');
-
-            const usernameDiv = document.createElement('div');
-            usernameDiv.classList.add('player-username-lobby');
-            usernameDiv.textContent = player.username;
-
-            playerContainer.appendChild(iconImg);
-            playerContainer.appendChild(usernameDiv);
-            lobbyPlayersGrid.appendChild(playerContainer);
+            const li = document.createElement('li');
+            li.textContent = `${player.username} (${player.pieceColor})`;
+            ul.appendChild(li);
         });
+        lobbyPlayersDiv.appendChild(ul);
     }
+    // Enable start button only for the creator when there are other players
     const storedUsername = localStorage.getItem('username');
-    const isCreator = players.some(p => p.username === storedUsername && players.length > 1);
-    startGameButton.style.display = isCreator && players.length <= maxPlayers ? 'block' : 'none';
-    if (players.length >= maxPlayers) {
-        lobbyErrorDiv.textContent = 'Lobby is full (16 players).';
-        joinButton.disabled = true;
-        createButton.disabled = true;
-    } else {
-        lobbyErrorDiv.textContent = '';
-        joinButton.disabled = false;
-        createButton.disabled = false;
-    }
+    const isCreator = players.some(p => p.username === storedUsername && playersInLobby.length > 1);
+    startGameButton.style.display = isCreator ? 'block' : 'none';
 }
 
 startGameButton.addEventListener('click', () => {
@@ -227,6 +195,7 @@ function initializeBoard(initialPositions) {
 }
 
 function updateBoard(currentPositions) {
+    // Clear previous player positions
     boardSquares.forEach(square => {
         const pieces = square.querySelectorAll('.player-piece');
         pieces.forEach(piece => piece.remove());
@@ -236,19 +205,16 @@ function updateBoard(currentPositions) {
         const position = currentPositions[player.playerId];
         if (position >= 0 && position < boardSquares.length) {
             const square = boardSquares[position];
-            const piece = document.createElement('img');
+            const piece = document.createElement('div');
             piece.classList.add('player-piece');
-            piece.src = player.pieceIcon;
-            piece.alt = player.username;
-            square.style.position = 'relative';
-            piece.style.width = '30px';
-            piece.style.height = '30px';
-            piece.style.position = 'absolute';
-            piece.style.left = `${Math.random() * 60 + 10}%`;
+            piece.style.backgroundColor = player.pieceColor;
+            piece.textContent = player.username.substring(0, 2).toUpperCase(); // Display initials
+            square.style.position = 'relative'; // Ensure positioning context
+            piece.style.left = `${Math.random() * 60 + 10}%`; // Simple random offset
             piece.style.top = `${Math.random() * 60 + 10}%`;
             square.appendChild(piece);
         } else if (position >= boardSquares.length) {
-            // Player finished
+            // Player finished (visual indication if needed)
         }
     });
 }
@@ -260,12 +226,14 @@ function updateLeaderboard(positions, players) {
     sortedPlayers.forEach(player => {
         const li = document.createElement('li');
         li.textContent = `${player.username}: ${positions[player.playerId] || 0}`;
-        const iconImg = document.createElement('img');
-        iconImg.src= player.pieceIcon;
-        iconImg.style.width = '16px';  // Adjust size as needed
-        iconImg.style.height = '16px';
-        iconImg.style.marginRight = '5px';
-        li.prepend(iconImg);
+        const colorSpan = document.createElement('span');
+        colorSpan.style.backgroundColor = player.pieceColor;
+        colorSpan.style.display = 'inline-block';
+        colorSpan.style.width = '10px';
+        colorSpan.style.height = '10px';
+        colorSpan.style.borderRadius = '50%';
+        colorSpan.style.marginRight = '5px';
+        li.prepend(colorSpan);
         leaderboardUl.appendChild(li);
     });
 }
@@ -286,33 +254,10 @@ submitAnswerButton.addEventListener('click', () => {
 });
 
 // --- Podium and New Game ---
-function displayPodium(podiumPlayers) {
-    podiumDiv.innerHTML = '';
-    podiumPlayers.forEach((player, index) => {
-        if (player) {
-            const placeDiv = document.createElement('div');
-            placeDiv.classList.add('podium-place');
-            const pieceImg = document.createElement('img');
-            pieceImg.classList.add('podium-piece');
-            pieceImg.src = player.pieceIcon;
-            pieceImg.style.width = '40px';
-            pieceImg.style.height = '40px';
-            pieceImg.alt = player.username;
-            const nameDiv = document.createElement('div');
-            nameDiv.textContent = player.username;
-            const rankDiv = document.createElement('div');
-            rankDiv.textContent = `#${index + 1}`;
-
-            placeDiv.appendChild(pieceImg);
-            placeDiv.appendChild(nameDiv);
-            placeDiv.appendChild(rankDiv);
-            podiumDiv.appendChild(placeDiv);
-        }
-    });
-}
+// Implement logic to display the podium with top 3 players
 
 newGameButton.addEventListener('click', () => {
-    localStorage.removeItem('gameCode');
+    localStorage.removeItem('gameCode'); // Clear any stored game code
     lobbyScreen.style.display = 'block';
     gameScreen.style.display = 'none';
     podiumScreen.style.display = 'none';
@@ -320,6 +265,7 @@ newGameButton.addEventListener('click', () => {
     lobbyErrorDiv.textContent = '';
     playersInLobby = [];
     updateLobbyPlayers(playersInLobby);
+    // Optionally, you might want to reconnect the WebSocket if it was closed.
     if (ws.readyState === WebSocket.CLOSED) {
         connectWebSocket();
     }
