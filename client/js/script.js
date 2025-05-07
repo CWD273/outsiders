@@ -32,6 +32,7 @@ let playersInLobby = [];
 let boardSquares = [];
 let playerPositions = {};
 let currentPlayerId;
+let gameBoardLayout;
 
 // --- WebSocket Connection ---
 function connectWebSocket() {
@@ -42,72 +43,10 @@ function connectWebSocket() {
 
     ws.onopen = () => {
         console.log('WebSocket connection established.');
-        lobbyScreen.style.display = 'block';
-        gameScreen.style.display = 'none';
-        podiumScreen.style.display = 'none';
+        showLobby();
     };
 
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        console.log('Received message:', data);
-
-        switch (data.type) {
-            case 'gameCreated':
-                gameCode = data.gameCode;
-                updateLobbyPlayers(playersInLobby);
-                lobbyErrorDiv.textContent = `Game created with code: ${gameCode}. Share this code with others.`;
-                break;
-            case 'lobbyUpdate':
-                playersInLobby = data.players;
-                updateLobbyPlayers(playersInLobby);
-                break;
-            case 'lobbyError':
-                lobbyErrorDiv.textContent = data.message;
-                break;
-            case 'gameStarted':
-                playerId = localStorage.getItem('playerId'); // Retrieve playerId
-                if (!playerId) {
-                    // Handle case where playerId is not stored (shouldn't happen normally)
-                    console.error('Player ID not found after game started.');
-                    return;
-                }
-                playerPositions = data.initialPositions;
-                initializeBoard(playerPositions);
-                updateLeaderboard(data.initialPositions, playersInLobby);
-                lobbyScreen.style.display = 'none';
-                gameScreen.style.display = 'block';
-                break;
-            case 'currentPlayer':
-                currentPlayerId = data.playerId;
-                if (currentPlayerId === playerId) {
-                    rollDiceButton.disabled = false;
-                } else {
-                    rollDiceButton.disabled = true;
-                }
-                break;
-            case 'diceRolled':
-                playerPositions = data.playerPositions;
-                updateBoard(playerPositions);
-                updateLeaderboard(playerPositions, playersInLobby);
-                diceResultDiv.textContent = `You rolled a ${data.roll}`;
-                triviaQuestionDiv.textContent = '';
-                triviaAnswerInput.value = '';
-                triviaResultDiv.textContent = '';
-                break;
-            case 'triviaQuestion':
-                triviaQuestionDiv.textContent = data.questionText;
-                break;
-            case 'triviaResult':
-                triviaResultDiv.textContent = data.correct ? 'Correct!' : `Incorrect. The answer was: ${data.correctAnswer}`;
-                break;
-            case 'playerWon':
-                finishMessageDiv.textContent = data.winnerId === playerId ? 'You Won!' : `${playersInLobby.find(p => p.playerId === data.winnerId)?.username} won!`;
-                finishMessageDiv.style.display = 'block';
-                // Implement logic to show podium
-                break;
-            // ... handle other game events (podium display, etc.)
-        }
-    };
+    ws.onmessage = handleWebSocketMessage;
 
     ws.onclose = () => {
         console.log('WebSocket connection closed.');
@@ -119,6 +58,119 @@ function connectWebSocket() {
     };
 }
 
+// --- UI State Management ---
+function showLobby() {
+    lobbyScreen.style.display = 'block';
+    gameScreen.style.display = 'none';
+    podiumScreen.style.display = 'none';
+}
+
+function showGame() {
+    lobbyScreen.style.display = 'none';
+    gameScreen.style.display = 'block';
+    podiumScreen.style.display = 'none';
+}
+
+function showPodium() {
+    lobbyScreen.style.display = 'none';
+    gameScreen.style.display = 'none';
+    podiumScreen.style.display = 'block';
+}
+
+// --- WebSocket Message Handling ---
+function handleWebSocketMessage(event) {
+    const data = JSON.parse(event.data);
+    console.log('Received message:', data);
+
+    switch (data.type) {
+        case 'gameCreated':
+            handleGameCreated(data.gameCode);
+            break;
+        case 'lobbyUpdate':
+            updateLobby(data.players);
+            break;
+        case 'lobbyError':
+            displayLobbyError(data.message);
+            break;
+        case 'gameStarted':
+            startGame(data.board, data.initialPositions, data.playerOrder);
+            break;
+        case 'currentPlayer':
+            setCurrentPlayer(data.playerId);
+            break;
+        case 'diceRolled':
+            updateGameAfterRoll(data.playerId, data.roll, data.playerPositions);
+            break;
+        case 'triviaQuestion':
+            displayTriviaQuestion(data.questionText);
+            break;
+        case 'triviaResult':
+            displayTriviaResult(data.correct, data.correctAnswer);
+            break;
+        case 'playerWon':
+            handlePlayerWon(data.winnerId);
+            break;
+        // ... handle other game events (podium display, etc.)
+    }
+}
+
+function handleGameCreated(newGameCode) {
+    gameCode = newGameCode;
+    updateLobbyPlayers(playersInLobby);
+    lobbyErrorDiv.textContent = `Game created with code: ${gameCode}. Share this code with others.`;
+}
+
+function updateLobby(players) {
+    playersInLobby = players;
+    updateLobbyPlayers(playersInLobby);
+}
+
+function displayLobbyError(message) {
+    lobbyErrorDiv.textContent = message;
+}
+
+function startGame(boardLayout, initialPositions, playerOrder) {
+    playerId = localStorage.getItem('playerId');
+    if (!playerId) {
+        console.error('Player ID not found after game started.');
+        return;
+    }
+    gameBoardLayout = boardLayout;
+    playerPositions = initialPositions;
+    initializeBoard(gameBoardLayout, playerPositions);
+    updateLeaderboard(playerPositions, playersInLobby);
+    showGame();
+}
+
+function setCurrentPlayer(playerIdTurn) {
+    currentPlayerId = playerIdTurn;
+    rollDiceButton.disabled = currentPlayerId !== playerId;
+}
+
+function updateGameAfterRoll(rolledPlayerId, rollValue, updatedPositions) {
+    playerPositions = updatedPositions;
+    updateBoard(playerPositions);
+    updateLeaderboard(playerPositions, playersInLobby);
+    diceResultDiv.textContent = rolledPlayerId === playerId ? `You rolled a ${rollValue}` : `${playersInLobby.find(p => p.playerId === rolledPlayerId)?.username} rolled a ${rollValue}`;
+    triviaQuestionDiv.textContent = '';
+    triviaAnswerInput.value = '';
+    triviaResultDiv.textContent = '';
+}
+
+function displayTriviaQuestion(questionText) {
+    triviaQuestionDiv.textContent = questionText;
+}
+
+function displayTriviaResult(isCorrect, correctAnswer) {
+    triviaResultDiv.textContent = isCorrect ? 'Correct!' : `Incorrect. The answer was: ${correctAnswer}`;
+}
+
+function handlePlayerWon(winnerId) {
+    finishMessageDiv.textContent = winnerId === playerId ? 'You Won!' : `${playersInLobby.find(p => p.playerId === winnerId)?.username} won!`;
+    finishMessageDiv.style.display = 'block';
+    // Implement logic to show podium
+}
+
 // --- Lobby Functions ---
 joinButton.addEventListener('click', () => {
     const username = usernameInput.value.trim();
@@ -126,8 +178,8 @@ joinButton.addEventListener('click', () => {
     const gameCodeToJoin = gameCodeJoinInput.value.trim().toUpperCase();
 
     if (username) {
-        localStorage.setItem('username', username); // Store username
-        localStorage.setItem('pieceColor', pieceColor); // Store color
+        localStorage.setItem('username', username);
+        localStorage.setItem('pieceColor', pieceColor);
         ws.send(JSON.stringify({
             type: 'joinGame',
             gameCode: gameCodeToJoin,
@@ -135,7 +187,7 @@ joinButton.addEventListener('click', () => {
             pieceColor: pieceColor
         }));
     } else {
-        lobbyErrorDiv.textContent = 'Please enter a username.';
+        displayLobbyError('Please enter a username.');
     }
 });
 
@@ -144,15 +196,15 @@ createButton.addEventListener('click', () => {
     const pieceColor = pieceColorInput.value;
 
     if (username) {
-        localStorage.setItem('username', username); // Store username
-        localStorage.setItem('pieceColor', pieceColor); // Store color
+        localStorage.setItem('username', username);
+        localStorage.setItem('pieceColor', pieceColor);
         ws.send(JSON.stringify({
             type: 'createGame',
             username: username,
             pieceColor: pieceColor
         }));
     } else {
-        lobbyErrorDiv.textContent = 'Please enter a username.';
+        displayLobbyError('Please enter a username.');
     }
 });
 
@@ -167,7 +219,6 @@ function updateLobbyPlayers(players) {
         });
         lobbyPlayersDiv.appendChild(ul);
     }
-    // Enable start button only for the creator when there are other players
     const storedUsername = localStorage.getItem('username');
     const isCreator = players.some(p => p.username === storedUsername && playersInLobby.length > 1);
     startGameButton.style.display = isCreator ? 'block' : 'none';
@@ -178,24 +229,30 @@ startGameButton.addEventListener('click', () => {
 });
 
 // --- Game Board Functions ---
-function initializeBoard(initialPositions) {
+function initializeBoard(boardLayout, initialPositions) {
     boardContainer.innerHTML = '';
     boardSquares = [];
-    for (let i = 0; i < 205; i++) {
+    boardLayout.forEach(squareData => {
         const square = document.createElement('div');
         square.classList.add('square');
-        square.textContent = i;
-        if ((i + 1) % 10 === 0 && i !== 0 && i < 200) {
+        square.textContent = squareData.index;
+        if (squareData.isTrivia) {
             square.classList.add('special-square');
+            square.textContent = 'T'; // Indicate trivia square
+        } else if (squareData.isStart) {
+            square.classList.add('start-square');
+            square.textContent = 'S'; // Indicate start square
+        } else if (squareData.isFinish) {
+            square.classList.add('finish-square');
+            square.textContent = 'F'; // Indicate finish square
         }
         boardContainer.appendChild(square);
         boardSquares.push(square);
-    }
+    });
     updateBoard(initialPositions);
 }
 
 function updateBoard(currentPositions) {
-    // Clear previous player positions
     boardSquares.forEach(square => {
         const pieces = square.querySelectorAll('.player-piece');
         pieces.forEach(piece => piece.remove());
@@ -208,9 +265,9 @@ function updateBoard(currentPositions) {
             const piece = document.createElement('div');
             piece.classList.add('player-piece');
             piece.style.backgroundColor = player.pieceColor;
-            piece.textContent = player.username.substring(0, 2).toUpperCase(); // Display initials
-            square.style.position = 'relative'; // Ensure positioning context
-            piece.style.left = `${Math.random() * 60 + 10}%`; // Simple random offset
+            piece.textContent = player.username.substring(0, 2).toUpperCase();
+            square.style.position = 'relative';
+            piece.style.left = `${Math.random() * 60 + 10}%`;
             piece.style.top = `${Math.random() * 60 + 10}%`;
             square.appendChild(piece);
         } else if (position >= boardSquares.length) {
@@ -257,15 +314,12 @@ submitAnswerButton.addEventListener('click', () => {
 // Implement logic to display the podium with top 3 players
 
 newGameButton.addEventListener('click', () => {
-    localStorage.removeItem('gameCode'); // Clear any stored game code
-    lobbyScreen.style.display = 'block';
-    gameScreen.style.display = 'none';
-    podiumScreen.style.display = 'none';
+    localStorage.removeItem('gameCode');
+    showLobby();
     finishMessageDiv.style.display = 'none';
     lobbyErrorDiv.textContent = '';
     playersInLobby = [];
     updateLobbyPlayers(playersInLobby);
-    // Optionally, you might want to reconnect the WebSocket if it was closed.
     if (ws.readyState === WebSocket.CLOSED) {
         connectWebSocket();
     }
