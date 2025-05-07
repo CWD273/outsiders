@@ -230,6 +230,7 @@ function updateLobbyPlayers(players) {
 }
 
 startGameButton.addEventListener('click', () => {
+    console.log('Client clicked "Start Game"');
     ws.send(JSON.stringify({ type: 'startGame' }));
 });
 
