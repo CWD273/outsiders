@@ -38,6 +38,7 @@ let gameBoardLayout;
 function connectWebSocket() {
     const backendUrl = 'https://outsiders-49p8.onrender.com'; // Replace with your Render backend URL
     const websocketUrl = backendUrl.replace(/^http(s?):\/\//, 'ws$1://');
+    console.log('Connecting to WebSocket:', websocketUrl);
 
     ws = new WebSocket(websocketUrl);
 
@@ -180,12 +181,14 @@ joinButton.addEventListener('click', () => {
     if (username) {
         localStorage.setItem('username', username);
         localStorage.setItem('pieceColor', pieceColor);
-        ws.send(JSON.stringify({
+        const joinPayload = {
             type: 'joinGame',
             gameCode: gameCodeToJoin,
             username: username,
             pieceColor: pieceColor
-        }));
+        };
+        console.log('Client sending:', JSON.stringify(joinPayload));
+        ws.send(JSON.stringify(joinPayload));
     } else {
         displayLobbyError('Please enter a username.');
     }
@@ -198,11 +201,13 @@ createButton.addEventListener('click', () => {
     if (username) {
         localStorage.setItem('username', username);
         localStorage.setItem('pieceColor', pieceColor);
-        ws.send(JSON.stringify({
+        const createPayload = {
             type: 'createGame',
             username: username,
             pieceColor: pieceColor
-        }));
+        };
+        console.log('Client sending:', JSON.stringify(createPayload));
+        ws.send(JSON.stringify(createPayload));
     } else {
         displayLobbyError('Please enter a username.');
     }
