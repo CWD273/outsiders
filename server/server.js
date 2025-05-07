@@ -15,54 +15,27 @@ const wss = new WebSocketServer({ server });
 // Store game states, lobbies, players, etc.
 const lobbies = {};
 
-wss.on('connection', ws => {
-    console.log('Client connected');
+// Trivia questions (The Outsiders by S.E. Hinton)
+const allTriviaQuestions = [
+    { text: "Who is the narrator of The Outsiders?", answer: "Ponyboy Curtis" },
+    { text: "What is the name of Ponyboy’s oldest brother?", answer: "Darry Curtis" },
+    { text: "Which gang is considered the rival of the Greasers?", answer: "Socs" },
+    { text: "Why does Ponyboy run away from home?", answer: "Darry slapped him" },
+    { text: "Who kills Bob Sheldon?", answer: "Johnny Cade" },
+    { text: "Where do Johnny and Ponyboy hide after the incident in the park?", answer: "An abandoned church in Windrixville" },
+    { text: "What book do Johnny and Ponyboy read while hiding out?", answer: "Gone With the Wind" },
+    { text: "What happens to the church where Johnny and Ponyboy are hiding?", answer: "It catches fire" },
+    { text: "Who gets badly injured while rescuing children from the fire?", answer: "Johnny Cade and Dally Winston" },
+    { text: "What does Dally do after Johnny dies?", answer: "He robs a grocery store" },
+    { text: "How does Dally die?", answer: "He is shot by the police" },
+    { text: "Who is Sodapop’s best friend?", answer: "Steve Randle" },
+    { text: "What is the name of the Soc girl who talks to Ponyboy at the drive-in?", answer: "Cherry Valance" },
+    { text: "What does Johnny give Ponyboy before he dies?", answer: "His copy of Gone With the Wind" },
+    { text: "What is Ponyboy’s real name?", answer: "Ponyboy Curtis" },
+    // Add more questions if you have them, up to 50
+];
 
-    ws.on('message', message => {
-        try {
-            const data = JSON.parse(message.toString());
-            // Handle different types of messages from the client
-            switch (data.type) {
-                case 'createGame':
-                    handleCreateGame(ws, data);
-                    break;
-                case 'joinGame':
-                    handleJoinGame(ws, data);
-                    break;
-                case 'startGame':
-                    handleStartGame(ws, data);
-                    break;
-                case 'rollDice':
-                    handleRollDice(ws, data);
-                    break;
-                case 'answerTrivia':
-                    handleAnswerTrivia(ws, data);
-                    break;
-                // ... other game actions
-            }
-        } catch (error) {
-            console.error('Failed to parse message or handle action:', error);
-        }
-    });
-
-    ws.on('close', () => {
-        console.log('Client disconnected');
-        // Handle player leaving (remove from lobby, game, etc.)
-        handleDisconnect(ws);
-    });
-
-    ws.on('error', error => {
-        console.error('WebSocket error:', error);
-    });
-});
-
-server.listen(port, () => {
-    console.log(`Server listening on port ${port}`);
-});
-
-// --- Helper Functions (to be implemented below) ---
 function generateGameCode() {
-    // Implement logic to generate a unique game code
     return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
@@ -71,6 +44,9 @@ function handleCreateGame(ws, data) {
     lobbies[gameCode] = {
         players: [],
         gameStarted: false,
+        board: createGameBoard(), // Initialize the game board
+        currentQuestionIndex: 0,
+        usedQuestionIndices: [],
         // ... other game state
     };
     joinLobby(ws, gameCode, data.username, data.pieceColor, true); // Creator joins immediately
@@ -103,9 +79,10 @@ function joinLobby(ws, gameCode, username, pieceColor, isCreator) {
         return;
     }
 
-    const player = { ws, username, pieceColor, playerId: Date.now() }; // Simple unique ID
+    const player = { ws, username, pieceColor, playerId: Date.now(), position: 0 }; // Add initial position
     lobby.players.push(player);
     ws.gameCode = gameCode; // Store game code on the WebSocket connection
+    ws.playerId = player.playerId; // Store player ID on the WebSocket connection
 
     // Notify all players in the lobby about the new joiner
     broadcastLobbyUpdate(gameCode);
@@ -132,20 +109,18 @@ function handleStartGame(ws, data) {
     if (lobby && lobby.players.length > 1 && lobby.players.find(p => p.ws === ws)) { // Only creator can start
         lobby.gameStarted = true;
         lobby.currentPlayerIndex = 0; // Start with the first player who joined
-        lobby.board = Array(205).fill(null); // Initialize the game board
-        lobby.playerPositions = {};
         lobby.players.forEach(player => {
-            lobby.playerPositions[player.playerId] = 0; // Start at square 0
+            player.position = 0; // Initialize player positions
         });
-        broadcastGameStart(gameCode);
+        broadcastGameStart(gameCode, lobby.board, lobby.players.map(p => ({ playerId: p.playerId, position: p.position })));
     }
 }
 
-function broadcastGameStart(gameCode) {
+function broadcastGameStart(gameCode, board, initialPositions) {
     const lobby = lobbies[gameCode];
     if (lobby) {
         lobby.players.forEach(player => {
-            player.ws.send(JSON.stringify({ type: 'gameStarted', playerOrder: lobby.players.map(p => p.playerId), initialPositions: lobby.playerPositions }));
+            player.ws.send(JSON.stringify({ type: 'gameStarted', board, initialPositions: initialPositions.reduce((acc, curr) => { acc[curr.playerId] = curr.position; return acc; }, {}), playerOrder: lobby.players.map(p => p.playerId) }));
         });
         sendCurrentPlayerTurn(gameCode);
     }
@@ -167,16 +142,19 @@ function handleRollDice(ws, data) {
     if (lobby && lobby.gameStarted && lobby.players[lobby.currentPlayerIndex]?.ws === ws) {
         const roll = Math.floor(Math.random() * 6) + 1;
         const playerId = data.playerId;
-        lobby.playerPositions[playerId] += roll;
-        broadcastDiceRoll(gameCode, playerId, roll, lobby.playerPositions);
+        const player = lobby.players.find(p => p.playerId === playerId);
+        if (player) {
+            player.position += roll;
+            broadcastDiceRoll(gameCode, playerId, roll, lobby.players.map(p => ({ playerId: p.playerId, position: p.position })));
 
-        // Check if landed on a special square
-        if (lobby.playerPositions[playerId] % 10 === 0 && lobby.playerPositions[playerId] !== 0 && lobby.playerPositions[playerId] < 205) {
-            sendTriviaQuestion(gameCode, playerId);
-        } else if (lobby.playerPositions[playerId] >= 205) {
-            handlePlayerWin(gameCode, playerId);
-        } else {
-            advanceTurn(gameCode);
+            const landedSquare = lobby.board.find(square => square.index === player.position);
+            if (landedSquare && landedSquare.isTrivia) {
+                sendTriviaQuestion(gameCode, playerId);
+            } else if (player.position >= 204) { // Index 204 is the finish square
+                handlePlayerWin(gameCode, playerId);
+            } else {
+                advanceTurn(gameCode);
+            }
         }
     }
 }
@@ -185,7 +163,7 @@ function broadcastDiceRoll(gameCode, playerId, roll, playerPositions) {
     const lobby = lobbies[gameCode];
     if (lobby) {
         lobby.players.forEach(player => {
-            player.ws.send(JSON.stringify({ type: 'diceRolled', playerId, roll, playerPositions }));
+            player.ws.send(JSON.stringify({ type: 'diceRolled', playerId, roll, playerPositions: playerPositions.reduce((acc, curr) => { acc[curr.playerId] = curr.position; return acc; }, {}) }));
         });
     }
 }
@@ -193,12 +171,22 @@ function broadcastDiceRoll(gameCode, playerId, roll, playerPositions) {
 function sendTriviaQuestion(gameCode, playerId) {
     const lobby = lobbies[gameCode];
     if (lobby) {
-        // Implement logic to fetch a trivia question
-        const question = { text: "What is the capital of France?", answer: "Paris" }; // Placeholder
-        const player = lobby.players.find(p => p.playerId === playerId);
-        if (player) {
-            player.ws.send(JSON.stringify({ type: 'triviaQuestion', questionText: question.text }));
-            lobby.currentQuestion = { question, playerId }; // Store current question
+        const availableQuestions = allTriviaQuestions.filter((_, index) => !lobby.usedQuestionIndices.includes(index));
+        if (availableQuestions.length > 0) {
+            const randomIndex = Math.floor(Math.random() * availableQuestions.length);
+            const question = availableQuestions[randomIndex];
+            const originalIndex = allTriviaQuestions.indexOf(question);
+            lobby.usedQuestionIndices.push(originalIndex);
+
+            const player = lobby.players.find(p => p.playerId === playerId);
+            if (player) {
+                player.ws.send(JSON.stringify({ type: 'triviaQuestion', questionText: question.text }));
+                lobby.currentQuestion = { question, playerId }; // Store current question
+            }
+        } else {
+            // Handle the case where all questions have been used (optional: reshuffle?)
+            console.log('All trivia questions have been used.');
+            advanceTurn(gameCode); // Move to the next turn if no question is available
         }
     }
 }
@@ -212,12 +200,7 @@ function handleAnswerTrivia(ws, data) {
         lobby.currentQuestion = null; // Clear the current question
 
         // Implement consequences for correct/incorrect answer (e.g., move again, stay put)
-        if (isCorrect) {
-            // Maybe allow another roll or continue turn
-            advanceTurn(gameCode);
-        } else {
-            advanceTurn(gameCode);
-        }
+        advanceTurn(gameCode); // For now, just advance the turn regardless of the answer
     }
 }
 
@@ -241,7 +224,6 @@ function advanceTurn(gameCode) {
 }
 
 function handleDisconnect(ws) {
-    // Implement logic to remove player from lobby and game state
     for (const gameCode in lobbies) {
         const lobby = lobbies[gameCode];
         lobby.players = lobby.players.filter(player => player.ws !== ws);
@@ -252,3 +234,59 @@ function handleDisconnect(ws) {
         }
     }
 }
+
+// --- Game Board Generation ---
+function createGameBoard() {
+    const board = [];
+    let index = 0;
+
+    // Initial 50 squares
+    for (let i = 0; i < 50; i++) {
+        board.push({ index: index++, isTrivia: (i + 1) % 10 === 0 && i !== 0 });
+    }
+
+    // Next 49 squares going the opposite direction
+    for (let i = 0; i < 49; i++) {
+        board.push({ index: index++, isTrivia: (50 + i + 1) % 10 === 0 });
+    }
+
+    // Extend out 6 more squares
+    for (let i = 0; i < 50; i++) {
+        board.push({ index: index++, isTrivia: (99 + i + 1) % 10 === 0 });
+    }
+
+    // Next 49 squares going the opposite direction
+    for (let i = 0; i < 49; i++) {
+        board.push({ index: index++, isTrivia: (149 + i + 1) % 10 === 0 });
+    }
+
+    // Final 7 squares to reach 205
+    for (let i = 0; i < 7; i++) {
+        board.push({ index: index++ });
+    }
+
+    // Set start and finish squares
+    board[0].isStart = true;
+    board[204].isFinish = true;
+
+    // Ensure exactly 20 trivia questions
+    const triviaSquares = board.filter(square => square.isTrivia);
+    while (triviaSquares.length > 20) {
+        const randomIndex = Math.floor(Math.random() * triviaSquares.length);
+        triviaSquares[randomIndex].isTrivia = false;
+        triviaSquares.splice(randomIndex, 1);
+    }
+    while (triviaSquares.length < 20) {
+        let randomIndex = Math.floor(Math.random() * board.length);
+        if (!board[randomIndex].isTrivia && !board[randomIndex].isStart && !board[randomIndex].isFinish) {
+            board[randomIndex].isTrivia = true;
+            triviaSquares.push(board[randomIndex]);
+        }
+    }
+
+    return board;
+}
+
+server.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
+});
