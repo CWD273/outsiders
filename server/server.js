@@ -138,16 +138,24 @@ function handleStartGame(ws, data) {
     const gameCode = ws.gameCode;
     const lobby = lobbies[gameCode];
     if (lobby && lobby.players.length > 1 && lobby.players.find(p => p.ws === ws)) { // Only creator can start
+        console.log('Start Game conditions met. Starting game for lobby:', gameCode);
         lobby.gameStarted = true;
         lobby.currentPlayerIndex = 0; // Start with the first player who joined
         lobby.players.forEach(player => {
             player.position = 0; // Initialize player positions
         });
         broadcastGameStart(gameCode, lobby.board, lobby.players.map(p => ({ playerId: p.playerId, position: p.position })));
+    } else {
+        console.log('Start Game conditions not met for lobby:', gameCode,
+            'Lobby exists:', !!lobby,
+            'Players > 1:', lobby?.players.length > 1,
+            'Is creator:', lobby?.players.find(p => p.ws === ws) ? true : false
+        );
     }
 }
 
 function broadcastGameStart(gameCode, board, initialPositions) {
+    console.log('Broadcasting game start for game:', gameCode);
     const lobby = lobbies[gameCode];
     if (lobby) {
         lobby.players.forEach(player => {
