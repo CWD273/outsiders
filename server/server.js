@@ -17,6 +17,53 @@ const wss = new WebSocketServer({ server });
 // Store game states, lobbies, players, etc.
 const lobbies = {};
 
+wss.on('connection', ws => {
+    console.log('Client connected');
+
+    ws.on('message', message => {
+        const data = JSON.parse(message.toString());
+        console.log('Server received:', data);
+
+        switch (data.type) {
+            case 'createGame':
+                console.log('Handling createGame:', data.username, data.pieceColor);
+                handleCreateGame(ws, data);
+                break;
+            case 'joinGame':
+                console.log('Handling joinGame:', data.gameCode, data.username, data.pieceColor);
+                handleJoinGame(ws, data);
+                break;
+            case 'startGame':
+                console.log('Handling startGame for game:', ws.gameCode);
+                handleStartGame(ws, data);
+                break;
+            case 'rollDice':
+                console.log('Handling rollDice for player:', data.playerId, 'in game:', ws.gameCode);
+                handleRollDice(ws, data);
+                break;
+            case 'answerTrivia':
+                console.log('Handling answerTrivia for player:', data.playerId, 'in game:', ws.gameCode, 'answer:', data.answer);
+                handleAnswerTrivia(ws, data);
+                break;
+            case 'disconnect':
+                console.log('Client initiated disconnect');
+                handleDisconnect(ws);
+                break;
+            default:
+                console.log('Unknown message type:', data.type);
+        }
+    });
+
+    ws.on('close', () => {
+        console.log('Client disconnected');
+        handleDisconnect(ws);
+    });
+
+    ws.on('error', error => {
+        console.error('WebSocket error:', error);
+    });
+});
+
 function generateGameCode() {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
@@ -29,6 +76,8 @@ function handleCreateGame(ws, data) {
         board: createGameBoard(), // Initialize the game board
         currentQuestionIndex: 0,
         usedQuestionIndices: [],
+        currentPlayerIndex: 0,
+        currentQuestion: null,
         // ... other game state
     };
     joinLobby(ws, gameCode, data.username, data.pieceColor, true); // Creator joins immediately
