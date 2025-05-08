@@ -8,22 +8,29 @@
 </head>
 <body>
     <div id="lobby-screen">
-        <h2>Join a Game</h2>
+        <h2>Join/Create Game</h2>
         <input type="text" id="username" placeholder="Username">
         <select id="piece-color">
             <option value="red">Red</option>
+            <option value="orange">Orange</option>
+            <option value="yellow">Yellow</option>
             <option value="blue">Blue</option>
             <option value="green">Green</option>
-            <option value="yellow">Yellow</option>
+            <option value="purple">Purple</option>
         </select>
-        <input type="text" id="game-code-join" placeholder="Game Code (optional)">
-        <button id="join-button">Join Game</button>
-        <div id="join-loading" class="loading-indicator">Joining...</div>
 
-        <h2>Create a New Game</h2>
-        <button id="create-button">Create Game</button>
+        <div id="initial-buttons" style="display: none;">
+            <button id="create-button">Create Game</button>
+            <button id="join-button">Join Game</button>
+        </div>
+
+        <div id="join-game-section" style="display: none;">
+            <input type="text" id="game-code-join" placeholder="Game Code">
+            <button id="join-game-confirm-button" >Join Game</button>
+            <div id="join-loading" class="loading-indicator">Joining...</div>
+        </div>
+
         <div id="create-loading" class="loading-indicator">Creating...</div>
-
         <div id="lobby-players">
             </div>
         <div id="lobby-error" style="color: red;"></div>
