@@ -9,6 +9,8 @@ const createButton = document.getElementById('create-button');
 const lobbyPlayersDiv = document.getElementById('lobby-players');
 const startGameButton = document.getElementById('start-game-button');
 const lobbyErrorDiv = document.getElementById('lobby-error');
+const joinLoadingIndicator = document.getElementById('join-loading');
+const createLoadingIndicator = document.getElementById('create-loading');
 
 let ws;
 let gameCode;
@@ -54,6 +56,12 @@ function handleWebSocketMessage(event) {
     const data = JSON.parse(event.data);
     console.log('Received message in lobby:', data);
 
+    // Hide loading indicators and re-enable buttons on any response
+    if (joinButton) joinButton.disabled = false;
+    if (joinLoadingIndicator) joinLoadingIndicator.style.display = 'none';
+    if (createButton) createButton.disabled = false;
+    if (createLoadingIndicator) createLoadingIndicator.style.display = 'none';
+
     switch (data.type) {
         case 'gameCreated':
             handleGameCreated(data.gameCode);
@@ -65,13 +73,11 @@ function handleWebSocketMessage(event) {
             displayLobbyError(data.message);
             break;
         case 'gameStarted':
-            // Store necessary game info in localStorage for game.html to access
             localStorage.setItem('boardLayout', JSON.stringify(data.board));
             localStorage.setItem('initialPositions', JSON.stringify(data.initialPositions));
             localStorage.setItem('playerOrder', JSON.stringify(data.playerOrder));
             showGame();
             break;
-        // We no longer handle game-specific messages here; game.js will do that.
     }
 }
 
@@ -91,46 +97,58 @@ function displayLobbyError(message) {
 }
 
 // --- Lobby Functions ---
-joinButton.addEventListener('click', () => {
-    const username = usernameInput.value.trim();
-    const pieceColor = pieceColorInput.value;
-    const gameCodeToJoin = gameCodeJoinInput.value.trim().toUpperCase();
+if (joinButton) {
+    joinButton.addEventListener('click', () => {
+        const username = usernameInput.value.trim();
+        const pieceColor = pieceColorInput.value;
+        const gameCodeToJoin = gameCodeJoinInput.value.trim().toUpperCase();
 
-    if (username) {
+        if (username) {
+            localStorage.setItem('username', username);
+            localStorage.setItem('pieceColor', pieceColor);
+            localStorage.setItem('playerId', Date.now());
+            const joinPayload = {
+                type: 'joinGame',
+                gameCode: gameCodeToJoin,
+                username: username,
+                pieceColor: pieceColor
+            };
+            console.log('Client sending join request:', JSON.stringify(joinPayload));
+            ws.send(JSON.stringify(joinPayload));
+
+            // Show loading indicator and disable button
+            joinButton.disabled = true;
+            joinLoadingIndicator.style.display = 'inline';
+        } else {
+            displayLobbyError('Please enter a username.');
+        }
+    });
+}
+
+if (createButton) {
+    createButton.addEventListener('click', () => {
+        const username = usernameInput.value.trim();
+        const pieceColor = pieceColorInput.value;
         localStorage.setItem('username', username);
         localStorage.setItem('pieceColor', pieceColor);
-        localStorage.setItem('playerId', Date.now()); // Basic player ID for now
-        const joinPayload = {
-            type: 'joinGame',
-            gameCode: gameCodeToJoin,
-            username: username,
-            pieceColor: pieceColor
-        };
-        console.log('Client sending join request:', JSON.stringify(joinPayload));
-        ws.send(JSON.stringify(joinPayload));
-    } else {
-        displayLobbyError('Please enter a username.');
-    }
-});
+        localStorage.setItem('playerId', Date.now());
+        if (username) {
+            const createPayload = {
+                type: 'createGame',
+                username: username,
+                pieceColor: pieceColor
+            };
+            console.log('Client sending create request:', JSON.stringify(createPayload));
+            ws.send(JSON.stringify(createPayload));
 
-createButton.addEventListener('click', () => {
-    const username = usernameInput.value.trim();
-    const pieceColor = pieceColorInput.value;
-    localStorage.setItem('username', username);
-    localStorage.setItem('pieceColor', pieceColor);
-    localStorage.setItem('playerId', Date.now()); // Basic player ID for now
-    if (username) {
-        const createPayload = {
-            type: 'createGame',
-            username: username,
-            pieceColor: pieceColor
-        };
-        console.log('Client sending create request:', JSON.stringify(createPayload));
-        ws.send(JSON.stringify(createPayload));
-    } else {
-        displayLobbyError('Please enter a username.');
-    }
-});
+            // Show loading indicator and disable button
+            createButton.disabled = true;
+            createLoadingIndicator.style.display = 'inline';
+        } else {
+            displayLobbyError('Please enter a username.');
+        }
+    });
+}
 
 function updateLobbyPlayers(players) {
     lobbyPlayersDiv.innerHTML = '<h3>Players in Lobby:</h3>';
