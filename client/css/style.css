@@ -1,5 +1,13 @@
 /* client/css/style.css */
-body {
+body
+
+.loading-indicator {
+    display: none; /* Hidden by default */
+    margin-left: 10px;
+    font-size: 0.8em;
+    color: gray;
+}
+
     font-family: sans-serif;
     display: flex;
     flex-direction: column;
