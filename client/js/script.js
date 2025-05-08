@@ -1,11 +1,12 @@
-// client/js/script.js
-
 const lobbyScreen = document.getElementById('lobby-screen');
 const usernameInput = document.getElementById('username');
 const pieceColorInput = document.getElementById('piece-color');
 const gameCodeJoinInput = document.getElementById('game-code-join');
 const joinButton = document.getElementById('join-button');
 const createButton = document.getElementById('create-button');
+const joinGameConfirmButton = document.getElementById('join-game-confirm-button'); // Get the new button
+const initialButtonsDiv = document.getElementById('initial-buttons');  //get initial buttons div
+const joinGameSectionDiv = document.getElementById('join-game-section'); //get join game section div
 const lobbyPlayersDiv = document.getElementById('lobby-players');
 const startGameButton = document.getElementById('start-game-button');
 const lobbyErrorDiv = document.getElementById('lobby-error');
@@ -19,7 +20,7 @@ let playersInLobby = [];
 
 // --- WebSocket Connection ---
 function connectWebSocket() {
-    const backendUrl = 'https://outsiders-49p8.onrender.com'; // Replace with your Render backend URL
+    const backendUrl = 'https://outsiders-49p8.onrender.com';
     const websocketUrl = backendUrl.replace(/^http(s?):\/\//, 'ws$1://');
     console.log('Connecting to WebSocket:', websocketUrl);
 
@@ -34,7 +35,6 @@ function connectWebSocket() {
 
     ws.onclose = () => {
         console.log('WebSocket connection closed.');
-        // Handle disconnection (e.g., show a message to the user)
     };
 
     ws.onerror = (error) => {
@@ -45,6 +45,9 @@ function connectWebSocket() {
 // --- UI State Management ---
 function showLobby() {
     lobbyScreen.style.display = 'block';
+    initialButtonsDiv.style.display = 'none'; // Hide initial buttons
+    joinGameSectionDiv.style.display = 'none';
+    startGameButton.style.display = 'none'; // Ensure start game button is hidden
 }
 
 function showGame() {
@@ -57,10 +60,10 @@ function handleWebSocketMessage(event) {
     console.log('Received message in lobby:', data);
 
     // Hide loading indicators and re-enable buttons on any response
-    if (joinButton) joinButton.disabled = false;
-    if (joinLoadingIndicator) joinLoadingIndicator.style.display = 'none';
     if (createButton) createButton.disabled = false;
     if (createLoadingIndicator) createLoadingIndicator.style.display = 'none';
+    if (joinGameConfirmButton) joinGameConfirmButton.disabled = false;
+    if (joinLoadingIndicator) joinLoadingIndicator.style.display = 'none';
 
     switch (data.type) {
         case 'gameCreated':
@@ -85,6 +88,7 @@ function handleGameCreated(newGameCode) {
     gameCode = newGameCode;
     updateLobbyPlayers(playersInLobby);
     lobbyErrorDiv.textContent = `Game created with code: ${gameCode}. Share this code with others.`;
+    startGameButton.style.display = 'block';
 }
 
 function updateLobby(players) {
@@ -97,31 +101,18 @@ function displayLobbyError(message) {
 }
 
 // --- Lobby Functions ---
+usernameInput.addEventListener('input', () => {
+    if (usernameInput.value.trim()) {
+        initialButtonsDiv.style.display = 'block';
+    } else {
+        initialButtonsDiv.style.display = 'none';
+        joinGameSectionDiv.style.display = 'none';
+    }
+});
+
 if (joinButton) {
     joinButton.addEventListener('click', () => {
-        const username = usernameInput.value.trim();
-        const pieceColor = pieceColorInput.value;
-        const gameCodeToJoin = gameCodeJoinInput.value.trim().toUpperCase();
-
-        if (username) {
-            localStorage.setItem('username', username);
-            localStorage.setItem('pieceColor', pieceColor);
-            localStorage.setItem('playerId', Date.now());
-            const joinPayload = {
-                type: 'joinGame',
-                gameCode: gameCodeToJoin,
-                username: username,
-                pieceColor: pieceColor
-            };
-            console.log('Client sending join request:', JSON.stringify(joinPayload));
-            ws.send(JSON.stringify(joinPayload));
-
-            // Show loading indicator and disable button
-            joinButton.disabled = true;
-            joinLoadingIndicator.style.display = 'inline';
-        } else {
-            displayLobbyError('Please enter a username.');
-        }
+        joinGameSectionDiv.style.display = 'block';
     });
 }
 
@@ -141,9 +132,35 @@ if (createButton) {
             console.log('Client sending create request:', JSON.stringify(createPayload));
             ws.send(JSON.stringify(createPayload));
 
-            // Show loading indicator and disable button
             createButton.disabled = true;
             createLoadingIndicator.style.display = 'inline';
+        } else {
+            displayLobbyError('Please enter a username.');
+        }
+    });
+}
+
+if (joinGameConfirmButton) {
+    joinGameConfirmButton.addEventListener('click', () => {
+        const username = usernameInput.value.trim();
+        const pieceColor = pieceColorInput.value;
+        const gameCodeToJoin = gameCodeJoinInput.value.trim().toUpperCase();
+
+        if (username) {
+            localStorage.setItem('username', username);
+            localStorage.setItem('pieceColor', pieceColor);
+            localStorage.setItem('playerId', Date.now());
+            const joinPayload = {
+                type: 'joinGame',
+                gameCode: gameCodeToJoin,
+                username: username,
+                pieceColor: pieceColor
+            };
+            console.log('Client sending join request:', JSON.stringify(joinPayload));
+            ws.send(JSON.stringify(joinPayload));
+
+            joinGameConfirmButton.disabled = true;
+            joinLoadingIndicator.style.display = 'inline';
         } else {
             displayLobbyError('Please enter a username.');
         }
