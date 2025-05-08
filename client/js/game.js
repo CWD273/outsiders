@@ -11,21 +11,62 @@ document.addEventListener('DOMContentLoaded', () => {
     const triviaResultDiv = document.getElementById('trivia-result-message');
     const finishMessageDiv = document.getElementById('finish-message');
     const podiumDiv = document.getElementById('podium');
-    const newGameButton = document.getElementById('new-game-button'); // Assuming this button is also on game.html
+    const newGameButton = document.getElementById('new-game-button');
 
     let ws;
-    let gameCode = localStorage.getItem('gameCode'); // Retrieve gameCode if needed
+    let gameCode = localStorage.getItem('gameCode');
     let playerId = localStorage.getItem('playerId');
-    let playersInLobby = []; // You might need to fetch this again or store it
+    let playersInLobby = [];
     let boardSquares = [];
     let playerPositions = JSON.parse(localStorage.getItem('initialPositions')) || {};
     let currentPlayerId = localStorage.getItem('currentPlayerId');
-    let gameBoardLayout = JSON.parse(localStorage.getItem('boardLayout')) || [];
+    let gameBoardLayout = createGameBoardLayout(); // Call the function to create the layout
     let playerOrder = JSON.parse(localStorage.getItem('playerOrder')) || [];
+    const boardSize = 10; // Consistent board size
+
+    // --- Game Board Layout Generation ---
+    function createGameBoardLayout() {
+        const layout = [];
+        let index = 0;
+
+        function addLine(startRow, startCol, directionRow, directionCol, length) {
+            let currentRow = startRow;
+            let currentCol = startCol;
+            for (let i = 0; i < length; i++) {
+                layout.push({
+                    index: index++,
+                    row: currentRow,
+                    col: currentCol,
+                    isStart: index === 1,
+                    isFinish: index === (boardSize * boardSize) - (boardSize - 1),
+                    isTrivia: Math.random() < 0.1
+                });
+                currentRow += directionRow;
+                currentCol += directionCol;
+            }
+        }
+
+        let currentRow = 0;
+        let currentCol = boardSize - 1;
+
+        addLine(currentRow, currentCol, 1, 0, boardSize);
+        currentCol--;
+
+        for (let i = 0; i < boardSize - 1; i++) {
+            addLine(boardSize - 1, currentCol, -1, 0, boardSize);
+            currentCol--;
+        }
+
+        if (layout.length > 0) {
+            layout[layout.length - 1].isFinish = true;
+        }
+
+        return layout;
+    }
 
     // --- WebSocket Connection ---
     function connectWebSocket() {
-        const backendUrl = 'https://outsiders-49p8.onrender.com'; // Replace with your Render backend URL
+        const backendUrl = 'https://outsiders-49p8.onrender.com';
         const websocketUrl = backendUrl.replace(/^http(s?):\/\//, 'ws$1://');
         console.log('Connecting to WebSocket in game:', websocketUrl);
 
@@ -77,7 +118,11 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'playerWon':
                 handlePlayerWon(data.winnerId);
                 break;
-            // Handle other game-specific messages if needed
+            case 'updatePosition': // Handle position updates from server if needed
+                playerPositions = data.playerPositions;
+                updateBoard(playerPositions, boardContainer);
+                updateLeaderboard(playerPositions, playersInLobby, leaderboardUl);
+                break;
         }
     }
 
@@ -86,20 +131,31 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!container) return;
         container.innerHTML = '';
         boardSquares = [];
+        container.style.gridTemplateColumns = `repeat(${boardSize}, 1fr)`;
+        container.style.width = `${boardSize * 40}px`; // Adjust width based on square size
+        container.style.height = `${boardSize * 40}px`; // Adjust height based on square size
+
         boardLayout.forEach(squareData => {
             const square = document.createElement('div');
             square.classList.add('square');
-            square.textContent = squareData.index;
+            square.dataset.index = squareData.index;
+
             if (squareData.isTrivia) {
                 square.classList.add('special-square');
-                square.textContent = 'T'; // Indicate trivia square
+                square.textContent = 'T';
             } else if (squareData.isStart) {
                 square.classList.add('start-square');
-                square.textContent = 'S'; // Indicate start square
+                square.textContent = 'S';
             } else if (squareData.isFinish) {
                 square.classList.add('finish-square');
-                square.textContent = 'F'; // Indicate finish square
+                square.textContent = 'F';
+            } else {
+                square.textContent = '';
             }
+
+            square.style.gridRowStart = squareData.row + 1;
+            square.style.gridColumnStart = squareData.col + 1;
+
             container.appendChild(square);
             boardSquares.push(square);
         });
@@ -115,18 +171,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         playersInLobby.forEach(player => {
             const position = currentPositions[player.playerId];
-            if (position >= 0 && position < boardSquares.length) {
+            if (position !== undefined && position >= 0 && position < boardSquares.length) {
                 const square = boardSquares[position];
                 const piece = document.createElement('div');
                 piece.classList.add('player-piece');
-                piece.style.backgroundColor = player.pieceColor;
+                piece.style.backgroundColor = player.pieceColor; // Assuming server sends pieceColor
                 piece.textContent = player.username.substring(0, 2).toUpperCase();
                 square.style.position = 'relative';
                 piece.style.left = `${Math.random() * 60 + 10}%`;
                 piece.style.top = `${Math.random() * 60 + 10}%`;
                 square.appendChild(piece);
             } else if (position >= boardSquares.length) {
-                // Player finished (visual indication if needed)
+                // Player finished
             }
         });
     }
@@ -185,16 +241,39 @@ document.addEventListener('DOMContentLoaded', () => {
             finishMessageDiv.style.display = 'block';
             // Potentially show podium
         }
-        // Disable further actions
         if (rollDiceButton) rollDiceButton.disabled = true;
         if (submitAnswerButton) submitAnswerButton.disabled = true;
+    }
+
+    function updatePlayerPosition(currentPlayerId, roll) {
+        const currentPlayerIndex = playersInLobby.findIndex(p => p.playerId === currentPlayerId);
+        if (currentPlayerIndex === -1) return;
+
+        const currentPosition = playerPositions[currentPlayerId] || 0;
+        const boardLength = gameBoardLayout.length;
+        let newPosition = (currentPosition + roll) % boardLength;
+        if (newPosition < 0) {
+            newPosition += boardLength;
+        }
+
+        playerPositions[currentPlayerId] = newPosition;
+
+        ws.send(JSON.stringify({
+            type: 'updatePosition',
+            playerId: currentPlayerId,
+            newPosition: newPosition,
+            playerPositions: playerPositions // Send all positions for simplicity
+        }));
+
+        updateBoard(playerPositions, boardContainer);
+        updateLeaderboard(playerPositions, playersInLobby, leaderboardUl);
     }
 
     // --- Event Listeners ---
     if (rollDiceButton) {
         rollDiceButton.addEventListener('click', () => {
             ws.send(JSON.stringify({ type: 'rollDice', playerId: playerId }));
-            rollDiceButton.disabled = true; // Disable until the server responds with the next turn
+            rollDiceButton.disabled = true;
         });
     }
 
@@ -203,8 +282,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const answer = triviaAnswerInput.value.trim();
             if (answer && triviaQuestionDiv.textContent) {
                 ws.send(JSON.stringify({ type: 'answerTrivia', playerId: playerId, answer: answer }));
-                triviaAnswerInput.value = ''; // Clear the input after sending
-                submitAnswerButton.disabled = true; // Disable until the result is received
+                triviaAnswerInput.value = '';
+                submitAnswerButton.disabled = true;
             }
         });
     }
@@ -216,8 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.removeItem('initialPositions');
             localStorage.removeItem('playerOrder');
             localStorage.removeItem('currentPlayerId');
-            // Clear other game-related localStorage if necessary
-            window.location.href = 'index.html'; // Go back to the lobby
+            window.location.href = 'index.html';
         });
     }
 
@@ -225,5 +303,5 @@ document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();
     initializeBoard(gameBoardLayout, boardContainer);
     updateLeaderboard(playerPositions, playersInLobby, leaderboardUl);
-    updateRollDiceButtonState(); // Set initial state based on current player
+    updateRollDiceButtonState();
 });
