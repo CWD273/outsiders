@@ -1,12 +1,12 @@
 const lobbyScreen = document.getElementById('lobby-screen');
 const usernameInput = document.getElementById('username');
-const pieceColorInput = document.getElementById('piece-color');
+const iconSelectionDiv = document.getElementById('icon-selection'); // Get the icon selection div
 const gameCodeJoinInput = document.getElementById('game-code-join');
 const joinButton = document.getElementById('join-button');
 const createButton = document.getElementById('create-button');
-const joinGameConfirmButton = document.getElementById('join-game-confirm-button'); // Get the new button
-const initialButtonsDiv = document.getElementById('initial-buttons');  //get initial buttons div
-const joinGameSectionDiv = document.getElementById('join-game-section'); //get join game section div
+const joinGameConfirmButton = document.getElementById('join-game-confirm-button');
+const initialButtonsDiv = document.getElementById('initial-buttons');
+const joinGameSectionDiv = document.getElementById('join-game-section');
 const lobbyPlayersDiv = document.getElementById('lobby-players');
 const startGameButton = document.getElementById('start-game-button');
 const lobbyErrorDiv = document.getElementById('lobby-error');
@@ -17,6 +17,7 @@ let ws;
 let gameCode;
 let playerId;
 let playersInLobby = [];
+let selectedIcon = null; // Variable to store the selected icon path
 
 // --- WebSocket Connection ---
 function connectWebSocket() {
@@ -45,9 +46,9 @@ function connectWebSocket() {
 // --- UI State Management ---
 function showLobby() {
     lobbyScreen.style.display = 'block';
-    initialButtonsDiv.style.display = 'none'; // Hide initial buttons
+    initialButtonsDiv.style.display = 'none';
     joinGameSectionDiv.style.display = 'none';
-    startGameButton.style.display = 'none'; // Ensure start game button is hidden
+    startGameButton.style.display = 'none';
 }
 
 function showGame() {
@@ -59,7 +60,6 @@ function handleWebSocketMessage(event) {
     const data = JSON.parse(event.data);
     console.log('Received message in lobby:', data);
 
-    // Hide loading indicators and re-enable buttons on any response
     if (createButton) createButton.disabled = false;
     if (createLoadingIndicator) createLoadingIndicator.style.display = 'none';
     if (joinGameConfirmButton) joinGameConfirmButton.disabled = false;
@@ -102,13 +102,34 @@ function displayLobbyError(message) {
 
 // --- Lobby Functions ---
 usernameInput.addEventListener('input', () => {
-    if (usernameInput.value.trim()) {
+    if (usernameInput.value.trim() && selectedIcon) { // Only show buttons if username and icon are selected
         initialButtonsDiv.style.display = 'block';
     } else {
         initialButtonsDiv.style.display = 'none';
         joinGameSectionDiv.style.display = 'none';
     }
 });
+
+if (iconSelectionDiv) {
+    iconSelectionDiv.addEventListener('click', (event) => {
+        if (event.target.classList.contains('icon-option')) {
+            // Remove selection from any previously selected icon
+            const previouslySelected = document.querySelector('.icon-option.selected');
+            if (previouslySelected) {
+                previouslySelected.classList.remove('selected');
+            }
+
+            // Add selection to the clicked icon
+            event.target.classList.add('selected');
+            selectedIcon = event.target.dataset.icon;
+
+            // Show initial buttons if username is also entered
+            if (usernameInput.value.trim()) {
+                initialButtonsDiv.style.display = 'block';
+            }
+        }
+    });
+}
 
 if (joinButton) {
     joinButton.addEventListener('click', () => {
@@ -119,15 +140,14 @@ if (joinButton) {
 if (createButton) {
     createButton.addEventListener('click', () => {
         const username = usernameInput.value.trim();
-        const pieceColor = pieceColorInput.value;
-        localStorage.setItem('username', username);
-        localStorage.setItem('pieceColor', pieceColor);
-        localStorage.setItem('playerId', Date.now());
-        if (username) {
+        if (username && selectedIcon) { // Ensure both username and icon are selected
+            localStorage.setItem('username', username);
+            localStorage.setItem('pieceColor', selectedIcon); // Store the icon path as pieceColor for now
+            localStorage.setItem('playerId', Date.now());
             const createPayload = {
                 type: 'createGame',
                 username: username,
-                pieceColor: pieceColor
+                pieceColor: selectedIcon // Send the icon path
             };
             console.log('Client sending create request:', JSON.stringify(createPayload));
             ws.send(JSON.stringify(createPayload));
@@ -135,7 +155,7 @@ if (createButton) {
             createButton.disabled = true;
             createLoadingIndicator.style.display = 'inline';
         } else {
-            displayLobbyError('Please enter a username.');
+            displayLobbyError('Please enter a username and select an icon.');
         }
     });
 }
@@ -143,18 +163,16 @@ if (createButton) {
 if (joinGameConfirmButton) {
     joinGameConfirmButton.addEventListener('click', () => {
         const username = usernameInput.value.trim();
-        const pieceColor = pieceColorInput.value;
         const gameCodeToJoin = gameCodeJoinInput.value.trim().toUpperCase();
-
-        if (username) {
+        if (username && selectedIcon) { // Ensure both username and icon are selected
             localStorage.setItem('username', username);
-            localStorage.setItem('pieceColor', pieceColor);
+            localStorage.setItem('pieceColor', selectedIcon); // Store the icon path
             localStorage.setItem('playerId', Date.now());
             const joinPayload = {
                 type: 'joinGame',
                 gameCode: gameCodeToJoin,
                 username: username,
-                pieceColor: pieceColor
+                pieceColor: selectedIcon // Send the icon path
             };
             console.log('Client sending join request:', JSON.stringify(joinPayload));
             ws.send(JSON.stringify(joinPayload));
@@ -162,7 +180,7 @@ if (joinGameConfirmButton) {
             joinGameConfirmButton.disabled = true;
             joinLoadingIndicator.style.display = 'inline';
         } else {
-            displayLobbyError('Please enter a username.');
+            displayLobbyError('Please enter a username and select an icon.');
         }
     });
 }
@@ -173,7 +191,7 @@ function updateLobbyPlayers(players) {
         const ul = document.createElement('ul');
         players.forEach(player => {
             const li = document.createElement('li');
-            li.textContent = `${player.username} (${player.pieceColor})`;
+            li.textContent = `${player.username} (${player.pieceColor})`; // Display the icon path for now
             ul.appendChild(li);
         });
         lobbyPlayersDiv.appendChild(ul);
