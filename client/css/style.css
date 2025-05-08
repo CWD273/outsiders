@@ -1,13 +1,5 @@
 /* client/css/style.css */
-body
-
-.loading-indicator {
-    display: none; /* Hidden by default */
-    margin-left: 10px;
-    font-size: 0.8em;
-    color: gray;
-}
-
+body {
     font-family: sans-serif;
     display: flex;
     flex-direction: column;
@@ -17,7 +9,16 @@ body
     background-color: #f0f0f0;
 }
 
-#lobby-screen, #game-screen, #podium-screen {
+.loading-indicator {
+    display: none; /* Hidden by default */
+    margin-left: 10px;
+    font-size: 0.8em;
+    color: gray;
+}
+
+#lobby-screen,
+#game-screen,
+#podium-screen {
     background-color: white;
     padding: 20px;
     border-radius: 8px;
@@ -147,7 +148,8 @@ button:disabled {
     cursor: not-allowed;
 }
 
-input[type="text"], input[type="color"] {
+input[type="text"],
+input[type="color"] {
     padding: 8px;
     margin: 5px;
     border: 1px solid #ccc;
