@@ -5,49 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trivia Board Game </title>
     <link rel="stylesheet" href="css/game.css">
-    <style>
-        body { font-family: sans-serif; display: flex; }
-        #leaderboard-container { width: 200px; margin-right: 20px; padding: 10px; border: 1px solid #ccc; }
-        #board-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 5px; width: 600px; height: 600px; border: 1px solid #aaa; }
-        .square { display: flex; justify-content: center; align-items: center; border: 1px solid #eee; font-size: 0.8em; }
-        .special-square { background-color: lightblue; }
-        .start-square { background-color: lightgreen; }
-        .finish-square { background-color: lightcoral; }
-        .player-piece { width: 20px; height: 20px; border-radius: 50%; color: white; font-size: 0.6em; display: flex; justify-content: center; align-items: center; position: absolute; }
-        #game-controls { margin-left: 20px; padding: 10px; border: 1px solid #ccc; }
-        #trivia-container { margin-top: 10px; }
-    </style>
 </head>
 <body>
-    <div id="leaderboard-container">
-        <h3>Leaderboard</h3>
-        <ul id="player-list">
+    <div id="game-area"> <div id="leaderboard-container">
+            <h3>Leaderboard</h3>
+            <ul id="player-list">
             </ul>
-    </div>
-
-    <div id="board-container">
         </div>
 
-    <div id="game-controls">
-        <div id="dice-area">
-            <button id="roll-dice-button" disabled>Roll Dice</button>
-            <div id="dice-result"></div>
+        <div id="board-container">
         </div>
 
-        <div id="trivia-container">
-            <div id="trivia-question"></div>
-            <input type="text" id="trivia-answer" placeholder="Your Answer">
-            <button id="submit-answer-button">Submit Answer</button>
-            <div id="trivia-result-message"></div>
-        </div>
-
-        <div id="finish-message" style="display: none;">
+        <div id="game-controls">
+            <div id="dice-area">
+                <button id="roll-dice-button" disabled>Roll Dice</button>
+                <div id="dice-result"></div>
             </div>
 
-        <div id="podium">
+            <div id="trivia-container">
+                <div id="trivia-question"></div>
+                <input type="text" id="trivia-answer" placeholder="Your Answer">
+                <button id="submit-answer-button">Submit Answer</button>
+                <div id="trivia-result-message"></div>
             </div>
 
-        <button id="new-game-button" style="margin-top: 20px;">New Game</button>
+            <div id="finish-message" style="display: none;">
+            </div>
+
+            <div id="podium">
+            </div>
+
+            <button id="new-game-button" style="margin-top: 20px;">New Game</button>
+        </div>
     </div>
 
     <script src="js/game.js"></script>
