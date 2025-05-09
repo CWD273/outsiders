@@ -1,4 +1,4 @@
-// client/js/game.js
+// js/game.js
 
 document.addEventListener('DOMContentLoaded', () => {
     const leaderboardUl = document.getElementById('player-list');
@@ -20,53 +20,42 @@ document.addEventListener('DOMContentLoaded', () => {
     let boardSquares = [];
     let playerPositions = JSON.parse(localStorage.getItem('initialPositions')) || {};
     let currentPlayerId = localStorage.getItem('currentPlayerId');
-    let gameBoardLayout = createGameBoardLayout(); // Call the function to create the layout
+    let gameBoardLayout = createGameBoardLayout();
     let playerOrder = JSON.parse(localStorage.getItem('playerOrder')) || [];
-    const boardSize = 10; // Consistent board size
+    const boardSize = 10;
 
-    // --- Game Board Layout Generation ---
     function createGameBoardLayout() {
         const layout = [];
         let index = 0;
 
-        function addLine(startRow, startCol, directionRow, directionCol, length) {
-            let currentRow = startRow;
-            let currentCol = startCol;
-            for (let i = 0; i < length; i++) {
-                layout.push({
-                    index: index++,
-                    row: currentRow,
-                    col: currentCol,
-                    isStart: index === 1,
-                    isFinish: index === (boardSize * boardSize) - (boardSize - 1),
-                    isTrivia: Math.random() < 0.1
-                });
-                currentRow += directionRow;
-                currentCol += directionCol;
+        function addSquare(row, col, isStart = false, isFinish = false, isTrivia = false) {
+            layout.push({ index: index++, row, col, isStart, isFinish, isTrivia });
+        }
+
+        // Top row (right to left)
+        for (let col = boardSize - 1; col >= 0; col--) {
+            addSquare(0, col, col === boardSize - 1, false, Math.random() < 0.1);
+        }
+
+        // Remaining rows (top to bottom, with a gap)
+        for (let row = 1; row < boardSize; row++) {
+            addSquare(row, 0, false, row === boardSize - 1, Math.random() < 0.1);
+            for (let col = 1; col < boardSize; col++) {
+                addSquare(row, col, false, false, Math.random() < 0.1);
             }
         }
 
-        let currentRow = 0;
-        let currentCol = boardSize - 1;
-
-        addLine(currentRow, currentCol, 1, 0, boardSize);
-        currentCol--;
-
-        for (let i = 0; i < boardSize - 1; i++) {
-            addLine(boardSize - 1, currentCol, -1, 0, boardSize);
-            currentCol--;
-        }
-
+        // Mark the final square as finish
         if (layout.length > 0) {
             layout[layout.length - 1].isFinish = true;
         }
+        layout[0].isStart = true; // Ensure the first square is start
 
         return layout;
     }
 
-    // --- WebSocket Connection ---
     function connectWebSocket() {
-        const backendUrl = 'https://outsiders-49p8.onrender.com';
+        const backendUrl = 'YOUR_RENDER_BACKEND_URL'; // Replace with your Render backend URL
         const websocketUrl = backendUrl.replace(/^http(s?):\/\//, 'ws$1://');
         console.log('Connecting to WebSocket in game:', websocketUrl);
 
@@ -74,14 +63,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ws.onopen = () => {
             console.log('WebSocket connection established in game.');
-            // Potentially send a message to the server to indicate you've joined the game view
         };
 
         ws.onmessage = handleWebSocketMessage;
 
         ws.onclose = () => {
             console.log('WebSocket connection closed in game.');
-            // Handle disconnection
         };
 
         ws.onerror = (error) => {
@@ -89,7 +76,6 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // --- WebSocket Message Handling ---
     function handleWebSocketMessage(event) {
         const data = JSON.parse(event.data);
         console.log('Received message in game:', data);
@@ -118,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'playerWon':
                 handlePlayerWon(data.winnerId);
                 break;
-            case 'updatePosition': // Handle position updates from server if needed
+            case 'updatePosition':
                 playerPositions = data.playerPositions;
                 updateBoard(playerPositions, boardContainer);
                 updateLeaderboard(playerPositions, playersInLobby, leaderboardUl);
@@ -126,14 +112,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Game Board Functions ---
     function initializeBoard(boardLayout, container) {
         if (!container) return;
         container.innerHTML = '';
         boardSquares = [];
         container.style.gridTemplateColumns = `repeat(${boardSize}, 1fr)`;
-        container.style.width = `${boardSize * 40}px`; // Adjust width based on square size
-        container.style.height = `${boardSize * 40}px`; // Adjust height based on square size
+        container.style.width = `${boardSize * 55}px`;
+        container.style.height = `${boardSize * 55}px`;
 
         boardLayout.forEach(squareData => {
             const square = document.createElement('div');
@@ -149,8 +134,6 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (squareData.isFinish) {
                 square.classList.add('finish-square');
                 square.textContent = 'F';
-            } else {
-                square.textContent = '';
             }
 
             square.style.gridRowStart = squareData.row + 1;
@@ -175,19 +158,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 const square = boardSquares[position];
                 const piece = document.createElement('div');
                 piece.classList.add('player-piece');
-                piece.style.backgroundColor = player.pieceColor; // Assuming server sends pieceColor
+                piece.style.backgroundColor = player.pieceColor;
                 piece.textContent = player.username.substring(0, 2).toUpperCase();
                 square.style.position = 'relative';
                 piece.style.left = `${Math.random() * 60 + 10}%`;
                 piece.style.top = `${Math.random() * 60 + 10}%`;
                 square.appendChild(piece);
-            } else if (position >= boardSquares.length) {
-                // Player finished
             }
         });
     }
 
-    // --- Leaderboard Functions ---
     function updateLeaderboard(positions, players, container) {
         if (!container) return;
         container.innerHTML = '';
@@ -207,7 +187,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Game Play Functions ---
     function updateRollDiceButtonState() {
         if (rollDiceButton) {
             rollDiceButton.disabled = currentPlayerId !== playerId;
@@ -230,7 +209,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function displayTriviaResult(isCorrect, correctAnswer) {
         if (triviaResultDiv) {
             triviaResultDiv.textContent = isCorrect ? 'Correct!' : `Incorrect. The answer was: ${correctAnswer}`;
-            // Optionally clear after a short delay
         }
     }
 
@@ -239,7 +217,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const winnerName = playersInLobby.find(p => p.playerId === winnerId)?.username || 'Someone';
             finishMessageDiv.textContent = winnerId === playerId ? 'You Won!' : `${winnerName} won!`;
             finishMessageDiv.style.display = 'block';
-            // Potentially show podium
         }
         if (rollDiceButton) rollDiceButton.disabled = true;
         if (submitAnswerButton) submitAnswerButton.disabled = true;
@@ -262,14 +239,13 @@ document.addEventListener('DOMContentLoaded', () => {
             type: 'updatePosition',
             playerId: currentPlayerId,
             newPosition: newPosition,
-            playerPositions: playerPositions // Send all positions for simplicity
+            playerPositions: playerPositions
         }));
 
         updateBoard(playerPositions, boardContainer);
         updateLeaderboard(playerPositions, playersInLobby, leaderboardUl);
     }
 
-    // --- Event Listeners ---
     if (rollDiceButton) {
         rollDiceButton.addEventListener('click', () => {
             ws.send(JSON.stringify({ type: 'rollDice', playerId: playerId }));
@@ -299,7 +275,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Initialization ---
     connectWebSocket();
     initializeBoard(gameBoardLayout, boardContainer);
     updateLeaderboard(playerPositions, playersInLobby, leaderboardUl);
