@@ -27,30 +27,18 @@ document.addEventListener('DOMContentLoaded', () => {
     function createGameBoardLayout() {
         const layout = [];
         let index = 0;
-
-        function addSquare(row, col, isStart = false, isFinish = false, isTrivia = false) {
-            layout.push({ index: index++, row, col, isStart, isFinish, isTrivia });
-        }
-
-        // Top row (right to left)
-        for (let col = boardSize - 1; col >= 0; col--) {
-            addSquare(0, col, col === boardSize - 1, false, Math.random() < 0.1);
-        }
-
-        // Remaining rows (top to bottom, with a gap)
-        for (let row = 1; row < boardSize; row++) {
-            addSquare(row, 0, false, row === boardSize - 1, Math.random() < 0.1);
-            for (let col = 1; col < boardSize; col++) {
-                addSquare(row, col, false, false, Math.random() < 0.1);
+        for (let row = 0; row < boardSize; row++) {
+            for (let col = 0; col < boardSize; col++) {
+                layout.push({
+                    index: index++,
+                    row: row,
+                    col: col,
+                    isStart: index === 1,
+                    isFinish: index === (boardSize * boardSize),
+                    isTrivia: Math.random() < 0.1
+                });
             }
         }
-
-        // Mark the final square as finish
-        if (layout.length > 0) {
-            layout[layout.length - 1].isFinish = true;
-        }
-        layout[0].isStart = true; // Ensure the first square is start
-
         return layout;
     }
 
