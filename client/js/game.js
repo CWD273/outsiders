@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function connectWebSocket() {
-        const backendUrl = 'YOUR_RENDER_BACKEND_URL'; // Replace with your Render backend URL
+        const backendUrl = 'https://outsiders-49p8.onrender.com'; // Replace with your Render backend URL
         const websocketUrl = backendUrl.replace(/^http(s?):\/\//, 'ws$1://');
         console.log('Connecting to WebSocket in game:', websocketUrl);
 
