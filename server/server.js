@@ -5,17 +5,52 @@ const http = require('http');
 const allTriviaQuestions = require('./trivia-questions'); // Import the questions
 
 const app = express();
-// Use the PORT environment variable provided by Render, or default to 3000 for local development
 const port = process.env.PORT || 3000;
-
-// Create an HTTP server from the Express app
 const server = http.createServer(app);
-
-// Initialize WebSocket server
 const wss = new WebSocketServer({ server });
 
-// Store game states, lobbies, players, etc.
 const lobbies = {};
+const BOARD_LENGTH = 120;
+const TRIVIA_INTERVAL = 5;
+const NUM_TRIVIA_QUESTIONS = 20; // Adjust as needed
+
+function createGameBoard() {
+    const board = Array(BOARD_LENGTH).fill(null).map((_, index) => ({
+        index: index,
+        isTrivia: (index + 1) % TRIVIA_INTERVAL === 0 && index !== 0
+    }));
+    board[0].isStart = true;
+    board[BOARD_LENGTH - 1].isFinish = true;
+
+    // Ensure a specific number of trivia questions (optional, adjust logic as needed)
+    const triviaSquares = board.filter(square => square.isTrivia);
+    while (triviaSquares.length < NUM_TRIVIA_QUESTIONS) {
+        const randomIndex = Math.floor(Math.random() * board.length);
+        if (!board[randomIndex].isTrivia && !board[randomIndex].isStart && !board[randomIndex].isFinish) {
+            board[randomIndex].isTrivia = true;
+            triviaSquares.push(board[randomIndex]);
+        }
+    }
+    while (triviaSquares.length > NUM_TRIVIA_QUESTIONS) {
+        const randomIndex = Math.floor(Math.random() * triviaSquares.length);
+        triviaSquares[randomIndex].isTrivia = false;
+        triviaSquares.splice(randomIndex, 1);
+    }
+
+    return board;
+}
+
+function getRandomTriviaQuestion(lobby) {
+    const availableQuestions = allTriviaQuestions.filter((_, index) => !lobby.usedQuestionIndices.includes(index));
+    if (availableQuestions.length > 0) {
+        const randomIndex = Math.floor(Math.random() * availableQuestions.length);
+        const question = availableQuestions[randomIndex];
+        const originalIndex = allTriviaQuestions.indexOf(question);
+        lobby.usedQuestionIndices.push(originalIndex);
+        return question;
+    }
+    return null;
+}
 
 wss.on('connection', ws => {
     console.log('Client connected');
@@ -26,27 +61,21 @@ wss.on('connection', ws => {
 
         switch (data.type) {
             case 'createGame':
-                console.log('Handling createGame:', data.username, data.pieceColor);
                 handleCreateGame(ws, data);
                 break;
             case 'joinGame':
-                console.log('Handling joinGame:', data.gameCode, data.username, data.pieceColor);
                 handleJoinGame(ws, data);
                 break;
             case 'startGame':
-                console.log('Handling startGame for game:', ws.gameCode);
                 handleStartGame(ws, data);
                 break;
             case 'rollDice':
-                console.log('Handling rollDice for player:', data.playerId, 'in game:', ws.gameCode);
-                handleRollDice(ws, data);
+                handleRollDice(ws,data);
                 break;
             case 'answerTrivia':
-                console.log('Handling answerTrivia for player:', data.playerId, 'in game:', ws.gameCode, 'answer:', data.answer);
                 handleAnswerTrivia(ws, data);
                 break;
             case 'disconnect':
-                console.log('Client initiated disconnect');
                 handleDisconnect(ws);
                 break;
             default:
@@ -73,10 +102,9 @@ function handleCreateGame(ws, data) {
     lobbies[gameCode] = {
         players: [],
         gameStarted: false,
-        board: createGameBoard(), // Initialize the game board
-        currentQuestionIndex: 0,
-        usedQuestionIndices: [],
+        board: createGameBoard(),
         currentPlayerIndex: 0,
+        usedQuestionIndices: [],
         currentQuestion: null,
         // ... other game state
     };
@@ -110,15 +138,13 @@ function joinLobby(ws, gameCode, username, pieceColor, isCreator) {
         return;
     }
 
-    const player = { ws, username, pieceColor, playerId: Date.now(), position: 0 }; // Add initial position
+    const player = { ws, username, pieceColor, playerId: Date.now(), position: 0 };
     lobby.players.push(player);
-    ws.gameCode = gameCode; // Store game code on the WebSocket connection
-    ws.playerId = player.playerId; // Store player ID on the WebSocket connection
+    ws.gameCode = gameCode;
+    ws.playerId = player.playerId;
 
-    // Notify all players in the lobby about the new joiner
     broadcastLobbyUpdate(gameCode);
 
-    // If the creator joined, send them the 'gameCreated' message
     if (isCreator) {
         ws.send(JSON.stringify({ type: 'gameCreated', gameCode }));
     }
@@ -137,31 +163,28 @@ function broadcastLobbyUpdate(gameCode) {
 function handleStartGame(ws, data) {
     const gameCode = ws.gameCode;
     const lobby = lobbies[gameCode];
-    if (lobby && lobby.players.length > 1 && lobby.players.find(p => p.ws === ws)) { // Only creator can start
+    if (lobby && lobby.players.length > 1 && lobby.players.find(p => p.ws === ws)) {
         console.log('Start Game conditions met. Starting game for lobby:', gameCode);
         lobby.gameStarted = true;
-        lobby.currentPlayerIndex = 0; // Start with the first player who joined
+        lobby.currentPlayerIndex = 0;
         lobby.players.forEach(player => {
-            player.position = 0; // Initialize player positions
+            player.position = 0;
         });
-        broadcastGameStart(gameCode, lobby.board, lobby.players.map(p => ({ playerId: p.playerId, position: p.position })));
+        const initialPositions = lobby.players.reduce((acc, player) => {
+            acc[player.playerId] = player.position;
+            return acc;
+        }, {});
+        const playerOrder = lobby.players.map(p => p.playerId);
+        lobby.players.forEach(player => {
+            player.ws.send(JSON.stringify({ type: 'gameStarted', board: lobby.board, initialPositions, playerOrder }));
+        });
+        sendCurrentPlayerTurn(gameCode);
     } else {
         console.log('Start Game conditions not met for lobby:', gameCode,
             'Lobby exists:', !!lobby,
             'Players > 1:', lobby?.players.length > 1,
             'Is creator:', lobby?.players.find(p => p.ws === ws) ? true : false
         );
-    }
-}
-
-function broadcastGameStart(gameCode, board, initialPositions) {
-    console.log('Broadcasting game start for game:', gameCode);
-    const lobby = lobbies[gameCode];
-    if (lobby) {
-        lobby.players.forEach(player => {
-            player.ws.send(JSON.stringify({ type: 'gameStarted', board, initialPositions: initialPositions.reduce((acc, curr) => { acc[curr.playerId] = curr.position; return acc; }, {}), playerOrder: lobby.players.map(p => p.playerId) }));
-        });
-        sendCurrentPlayerTurn(gameCode);
     }
 }
 
@@ -179,17 +202,31 @@ function handleRollDice(ws, data) {
     const gameCode = ws.gameCode;
     const lobby = lobbies[gameCode];
     if (lobby && lobby.gameStarted && lobby.players[lobby.currentPlayerIndex]?.ws === ws) {
-        const roll = Math.floor(Math.random() * 6) + 1;
+        const roll = Math.floor(Math.random() * 10) + 1;
         const playerId = data.playerId;
         const player = lobby.players.find(p => p.playerId === playerId);
         if (player) {
             player.position += roll;
-            broadcastDiceRoll(gameCode, playerId, roll, lobby.players.map(p => ({ playerId: p.playerId, position: p.position })));
+            const playerPositions = lobby.players.reduce((acc, p) => {
+                acc[p.playerId] = p.position;
+                return acc;
+            }, {});
+            lobby.players.forEach(p => {
+                p.ws.send(JSON.stringify({ type: 'diceRolled', playerId, roll, playerPositions }));
+            });
 
-            const landedSquare = lobby.board.find(square => square.index === player.position);
+            const landedSquareIndex = player.position;
+            const landedSquare = lobby.board.find(square => square.index === landedSquareIndex);
             if (landedSquare && landedSquare.isTrivia) {
-                sendTriviaQuestion(gameCode, playerId);
-            } else if (player.position >= 204) { // Index 204 is the finish square
+                const question = getRandomTriviaQuestion(lobby);
+                if (question) {
+                    player.ws.send(JSON.stringify({ type: 'triviaQuestion', questionText: question.text, choices: shuffleArray(question.choices), image: question.image }));
+                    lobby.currentQuestion = { question, playerId };
+                } else {
+                    console.log('No more trivia questions available.');
+                    advanceTurn(gameCode);
+                }
+            } else if (landedSquareIndex >= BOARD_LENGTH - 1) {
                 handlePlayerWin(gameCode, playerId);
             } else {
                 advanceTurn(gameCode);
@@ -198,59 +235,48 @@ function handleRollDice(ws, data) {
     }
 }
 
-function broadcastDiceRoll(gameCode, playerId, roll, playerPositions) {
-    const lobby = lobbies[gameCode];
-    if (lobby) {
-        lobby.players.forEach(player => {
-            player.ws.send(JSON.stringify({ type: 'diceRolled', playerId, roll, playerPositions: playerPositions.reduce((acc, curr) => { acc[curr.playerId] = curr.position; return acc; }, {}) }));
-        });
-    }
-}
-
-function sendTriviaQuestion(gameCode, playerId) {
-    const lobby = lobbies[gameCode];
-    if (lobby) {
-        const availableQuestions = allTriviaQuestions.filter((_, index) => !lobby.usedQuestionIndices.includes(index));
-        if (availableQuestions.length > 0) {
-            const randomIndex = Math.floor(Math.random() * availableQuestions.length);
-            const question = availableQuestions[randomIndex];
-            const originalIndex = allTriviaQuestions.indexOf(question);
-            lobby.usedQuestionIndices.push(originalIndex);
-
-            const player = lobby.players.find(p => p.playerId === playerId);
-            if (player) {
-                player.ws.send(JSON.stringify({ type: 'triviaQuestion', questionText: question.text }));
-                lobby.currentQuestion = { question, playerId }; // Store current question
-            }
-        } else {
-            // Handle the case where all questions have been used (optional: reshuffle?)
-            console.log('All trivia questions have been used.');
-            advanceTurn(gameCode); // Move to the next turn if no question is available
-        }
-    }
-}
-
 function handleAnswerTrivia(ws, data) {
     const gameCode = ws.gameCode;
     const lobby = lobbies[gameCode];
     if (lobby && lobby.currentQuestion && lobby.currentQuestion.playerId === data.playerId) {
-        const isCorrect = data.answer.toLowerCase() === lobby.currentQuestion.question.answer.toLowerCase();
-        ws.send(JSON.stringify({ type: 'triviaResult', correct: isCorrect, correctAnswer: lobby.currentQuestion.question.answer }));
-        lobby.currentQuestion = null; // Clear the current question
+        const isCorrect = data.answer.toLowerCase() === lobby.currentQuestion.question.correctAnswer.toLowerCase();
+        ws.send(JSON.stringify({ type: 'triviaResult', correct: isCorrect, correctAnswer: lobby.currentQuestion.question.correctAnswer }));
 
-        // Implement consequences for correct/incorrect answer (e.g., move again, stay put)
-        advanceTurn(gameCode); // For now, just advance the turn regardless of the answer
+        const player = lobby.players.find(p => p.playerId === data.playerId);
+        if (player) {
+            if (isCorrect) {
+                player.position += 5;
+            } else {
+                player.position -= 5;
+                if (player.position < 0) player.position = 0;
+            }
+            const playerPositions = lobby.players.reduce((acc, p) => {
+                acc[p.playerId] = p.position;
+                return acc;
+            }, {});
+            lobby.players.forEach(p => {
+                p.ws.send(JSON.stringify({ type: 'playerPositionsUpdate', playerPositions }));
+            });
+
+            const landedSquareIndex = player.position;
+            if (landedSquareIndex >= BOARD_LENGTH - 1) {
+                handlePlayerWin(gameCode, data.playerId);
+            } else {
+                advanceTurn(gameCode);
+            }
+        }
+        lobby.currentQuestion = null;
     }
 }
 
 function handlePlayerWin(gameCode, playerId) {
     const lobby = lobbies[gameCode];
     if (lobby) {
-        // Implement win handling: record finish time/order
         lobby.players.forEach(player => {
             player.ws.send(JSON.stringify({ type: 'playerWon', winnerId: playerId }));
         });
-        // Potentially trigger podium display logic
+        // Optionally, you could clean up the lobby after the game ends
+        // delete lobbies[gameCode];
     }
 }
 
@@ -267,63 +293,19 @@ function handleDisconnect(ws) {
         const lobby = lobbies[gameCode];
         lobby.players = lobby.players.filter(player => player.ws !== ws);
         if (lobby.players.length === 0) {
-            delete lobbies[gameCode]; // Clean up empty lobbies
+            delete lobbies[gameCode];
         } else {
             broadcastLobbyUpdate(gameCode);
         }
     }
 }
 
-// --- Game Board Generation ---
-function createGameBoard() {
-    const board = [];
-    let index = 0;
-
-    // Initial 50 squares
-    for (let i = 0; i < 50; i++) {
-        board.push({ index: index++, isTrivia: (i + 1) % 10 === 0 && i !== 0 });
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
     }
-
-    // Next 49 squares going the opposite direction
-    for (let i = 0; i < 49; i++) {
-        board.push({ index: index++, isTrivia: (50 + i + 1) % 10 === 0 });
-    }
-
-    // Extend out 6 more squares
-    for (let i = 0; i < 50; i++) {
-        board.push({ index: index++, isTrivia: (99 + i + 1) % 10 === 0 });
-    }
-
-    // Next 49 squares going the opposite direction
-    for (let i = 0; i < 49; i++) {
-        board.push({ index: index++, isTrivia: (149 + i + 1) % 10 === 0 });
-    }
-
-    // Final 7 squares to reach 205
-    for (let i = 0; i < 7; i++) {
-        board.push({ index: index++ });
-    }
-
-    // Set start and finish squares
-    board[0].isStart = true;
-    board[204].isFinish = true;
-
-    // Ensure exactly 20 trivia questions
-    const triviaSquares = board.filter(square => square.isTrivia);
-    while (triviaSquares.length > 20) {
-        const randomIndex = Math.floor(Math.random() * triviaSquares.length);
-        triviaSquares[randomIndex].isTrivia = false;
-        triviaSquares.splice(randomIndex, 1);
-    }
-    while (triviaSquares.length < 20) {
-        let randomIndex = Math.floor(Math.random() * board.length);
-        if (!board[randomIndex].isTrivia && !board[randomIndex].isStart && !board[randomIndex].isFinish) {
-            board[randomIndex].isTrivia = true;
-            triviaSquares.push(board[randomIndex]);
-        }
-    }
-
-    return board;
+    return array;
 }
 
 // Health check endpoint for Render
