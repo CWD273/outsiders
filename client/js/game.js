@@ -1,270 +1,241 @@
-// js/game.js
+const gameScreen = document.getElementById('game-screen');
+const boardContainer = document.getElementById('board-container');
+const rollDiceButton = document.getElementById('roll-dice-button');
+const dicePopup = document.getElementById('dice-popup');
+const diceRoller = document.getElementById('dice-roller');
+const stopDiceButton = document.getElementById('stop-dice-button');
+const triviaPopup = document.getElementById('trivia-popup');
+const triviaImage = document.getElementById('trivia-image');
+const triviaQuestion = document.getElementById('trivia-question');
+const triviaChoices = document.getElementById('trivia-choices');
+const resultPopup = document.getElementById('result-popup');
+const resultMessage = document.getElementById('result-message');
+const finishPopup = document.getElementById('finish-popup');
+const finishText = document.getElementById('finish-text');
+const newGameButton = document.getElementById('new-game-button');
+const currentPlayerDisplay = document.getElementById('current-player');
 
-document.addEventListener('DOMContentLoaded', () => {
-    const leaderboardUl = document.getElementById('player-list');
-    const boardContainer = document.getElementById('board-container');
-    const rollDiceButton = document.getElementById('roll-dice-button');
-    const submitAnswerButton = document.getElementById('submit-answer-button');
-    const diceResultDiv = document.getElementById('dice-result');
-    const triviaQuestionDiv = document.getElementById('trivia-question');
-    const triviaAnswerInput = document.getElementById('trivia-answer');
-    const triviaResultDiv = document.getElementById('trivia-result-message');
-    const finishMessageDiv = document.getElementById('finish-message');
-    const podiumDiv = document.getElementById('podium');
-    const newGameButton = document.getElementById('new-game-button');
+let ws;
+let boardLayout;
+let playerPositions = {};
+let playerId = localStorage.getItem('playerId');
+let username = localStorage.getItem('username');
+let pieceColor = localStorage.getItem('pieceColor');
+let playerOrder = [];
+let currentPlayerId;
+let diceInterval;
+let currentDiceRoll;
+let canRollDice = false;
 
-    let ws;
-    let gameCode = localStorage.getItem('gameCode');
-    let playerId = localStorage.getItem('playerId');
-    let playersInLobby = [];
-    let boardSquares = [];
-    let playerPositions = JSON.parse(localStorage.getItem('initialPositions')) || {};
-    let currentPlayerId = localStorage.getItem('currentPlayerId');
-    let gameBoardLayout = createGameBoardLayout();
-    let playerOrder = JSON.parse(localStorage.getItem('playerOrder')) || [];
-    const boardSize = 10;
+function connectWebSocket() {
+    const backendUrl = 'https://outsiders-49p8.onrender.com';
+    const websocketUrl = backendUrl.replace(/^http(s?):\/\//, 'ws$1://');
+    ws = new WebSocket(websocketUrl);
 
-    function createGameBoardLayout() {
-        const layout = [];
-        let index = 0;
-        for (let row = 0; row < boardSize; row++) {
-            for (let col = 0; col < boardSize; col++) {
-                layout.push({
-                    index: index++,
-                    row: row,
-                    col: col,
-                    isStart: index === 1,
-                    isFinish: index === (boardSize * boardSize),
-                    isTrivia: Math.random() < 0.1
-                });
+    ws.onopen = () => {
+        console.log('WebSocket connection established on game screen.');
+    };
+
+    ws.onmessage = handleWebSocketMessage;
+
+    ws.onclose = () => {
+        console.log('WebSocket connection closed on game screen.');
+    };
+
+    ws.onerror = (error) => {
+        console.error('WebSocket error on game screen:', error);
+    };
+}
+
+function handleWebSocketMessage(event) {
+    const data = JSON.parse(event.data);
+    console.log('Received message in game:', data);
+
+    switch (data.type) {
+        case 'gameStarted':
+            boardLayout = JSON.parse(localStorage.getItem('boardLayout'));
+            playerPositions = JSON.parse(localStorage.getItem('initialPositions')) || {};
+            playerOrder = JSON.parse(localStorage.getItem('playerOrder')) || [];
+            renderBoard(boardLayout);
+            updatePlayerPositions(data.initialPositions);
+            break;
+        case 'diceRolled':
+            updatePlayerPositions(data.playerPositions);
+            break;
+        case 'currentPlayer':
+            currentPlayerId = data.playerId;
+            updateCurrentPlayerDisplay();
+            if (currentPlayerId === playerId) {
+                rollDiceButton.style.display = 'block';
+                canRollDice = true;
+            } else {
+                rollDiceButton.style.display = 'none';
+                canRollDice = false;
             }
+            break;
+        case 'triviaQuestion':
+            showTriviaPopup(data.questionText); // You'll need to fetch image and choices
+            break;
+        case 'triviaResult':
+            showResultPopup(data.correct, data.correctAnswer);
+            break;
+        case 'playerWon':
+            showFinishPopup(data.winnerId === playerId ? 'You Win!' : 'You Lose!');
+            break;
+        case 'playerPositionsUpdate':
+            updatePlayerPositions(data.playerPositions);
+            break;
+    }
+}
+
+function renderBoard(board) {
+    boardContainer.innerHTML = '';
+    for (let i = 0; i < board.length; i++) {
+        const square = document.createElement('div');
+        square.classList.add('square');
+        square.textContent = board[i].index + 1;
+        if (board[i].isTrivia) {
+            square.classList.add('trivia-square');
         }
-        return layout;
-    }
-
-    function connectWebSocket() {
-        const backendUrl = 'https://outsiders-49p8.onrender.com'; // Replace with your Render backend URL
-        const websocketUrl = backendUrl.replace(/^http(s?):\/\//, 'ws$1://');
-        console.log('Connecting to WebSocket in game:', websocketUrl);
-
-        ws = new WebSocket(websocketUrl);
-
-        ws.onopen = () => {
-            console.log('WebSocket connection established in game.');
-        };
-
-        ws.onmessage = handleWebSocketMessage;
-
-        ws.onclose = () => {
-            console.log('WebSocket connection closed in game.');
-        };
-
-        ws.onerror = (error) => {
-            console.error('WebSocket error in game:', error);
-        };
-    }
-
-    function handleWebSocketMessage(event) {
-        const data = JSON.parse(event.data);
-        console.log('Received message in game:', data);
-
-        switch (data.type) {
-            case 'lobbyUpdate':
-                playersInLobby = data.players;
-                updateLeaderboard(playerPositions, playersInLobby, leaderboardUl);
-                break;
-            case 'currentPlayer':
-                currentPlayerId = data.playerId;
-                updateRollDiceButtonState();
-                break;
-            case 'diceRolled':
-                playerPositions = data.playerPositions;
-                updateBoard(playerPositions, boardContainer);
-                updateLeaderboard(playerPositions, playersInLobby, leaderboardUl);
-                displayDiceRollResult(data.playerId, data.roll);
-                break;
-            case 'triviaQuestion':
-                displayTriviaQuestion(data.questionText);
-                break;
-            case 'triviaResult':
-                displayTriviaResult(data.correct, data.correctAnswer);
-                break;
-            case 'playerWon':
-                handlePlayerWon(data.winnerId);
-                break;
-            case 'updatePosition':
-                playerPositions = data.playerPositions;
-                updateBoard(playerPositions, boardContainer);
-                updateLeaderboard(playerPositions, playersInLobby, leaderboardUl);
-                break;
+        if (i === 0) {
+            square.classList.add('start-square');
+            square.textContent = 'Start';
         }
+        if (i === board.length - 1) {
+            square.classList.add('finish-square');
+            square.textContent = 'Finish';
+        }
+        boardContainer.appendChild(square);
     }
+}
 
-    function initializeBoard(boardLayout, container) {
-        if (!container) return;
-        container.innerHTML = '';
-        boardSquares = [];
-        container.style.gridTemplateColumns = `repeat(${boardSize}, 1fr)`;
-        container.style.width = `${boardSize * 55}px`;
-        container.style.height = `${boardSize * 55}px`;
+function updatePlayerPositions(positions) {
+    playerPositions = positions;
+    const squares = document.querySelectorAll('#board-container .square');
+    squares.forEach(square => {
+        // Remove previous player pieces
+        const pieces = square.querySelectorAll('.player-piece');
+        pieces.forEach(piece => piece.remove());
 
-        boardLayout.forEach(squareData => {
-            const square = document.createElement('div');
-            square.classList.add('square');
-            square.dataset.index = squareData.index;
-
-            if (squareData.isTrivia) {
-                square.classList.add('special-square');
-                square.textContent = 'T';
-            } else if (squareData.isStart) {
-                square.classList.add('start-square');
-                square.textContent = 'S';
-            } else if (squareData.isFinish) {
-                square.classList.add('finish-square');
-                square.textContent = 'F';
-            }
-
-            square.style.gridRowStart = squareData.row + 1;
-            square.style.gridColumnStart = squareData.col + 1;
-
-            container.appendChild(square);
-            boardSquares.push(square);
-        });
-        updateBoard(playerPositions, container);
-    }
-
-    function updateBoard(currentPositions, container) {
-        if (!container || !boardSquares) return;
-        boardSquares.forEach(square => {
-            const pieces = square.querySelectorAll('.player-piece');
-            pieces.forEach(piece => piece.remove());
-        });
-
-        playersInLobby.forEach(player => {
-            const position = currentPositions[player.playerId];
-            if (position !== undefined && position >= 0 && position < boardSquares.length) {
-                const square = boardSquares[position];
+        // Add current player pieces
+        for (const pId in positions) {
+            const position = positions[pId];
+            if (boardLayout && position >= 0 && position < boardLayout.length && squares[position]) {
+                const player = playerOrder.find(id => id.toString() === pId);
+                const playerIndex = playerOrder.indexOf(parseInt(pId));
                 const piece = document.createElement('div');
                 piece.classList.add('player-piece');
-                piece.style.backgroundColor = player.pieceColor;
-                piece.textContent = player.username.substring(0, 2).toUpperCase();
-                square.style.position = 'relative';
-                piece.style.left = `${Math.random() * 60 + 10}%`;
-                piece.style.top = `${Math.random() * 60 + 10}%`;
-                square.appendChild(piece);
+                piece.style.backgroundColor = pieceColor; // Use the stored color
+                piece.textContent = playerIndex + 1; // Show player number
+                squares[position].appendChild(piece);
+
+                // Basic stacking logic (adjust as needed for more than a few players)
+                const existingPieces = squares[position].querySelectorAll('.player-piece');
+                if (existingPieces.length > 1) {
+                    const offset = (existingPieces.length - 1) * 5;
+                    piece.style.left = `${10 + offset}px`;
+                    piece.style.top = `${10 + offset}px`;
+                }
             }
-        });
-    }
-
-    function updateLeaderboard(positions, players, container) {
-        if (!container) return;
-        container.innerHTML = '';
-        const sortedPlayers = players.sort((a, b) => (positions[b.playerId] || 0) - (positions[a.playerId] || 0));
-        sortedPlayers.forEach(player => {
-            const li = document.createElement('li');
-            li.textContent = `${player.username}: ${positions[player.playerId] || 0}`;
-            const colorSpan = document.createElement('span');
-            colorSpan.style.backgroundColor = player.pieceColor;
-            colorSpan.style.display = 'inline-block';
-            colorSpan.style.width = '10px';
-            colorSpan.style.height = '10px';
-            colorSpan.style.borderRadius = '50%';
-            colorSpan.style.marginRight = '5px';
-            li.prepend(colorSpan);
-            container.appendChild(li);
-        });
-    }
-
-    function updateRollDiceButtonState() {
-        if (rollDiceButton) {
-            rollDiceButton.disabled = currentPlayerId !== playerId;
         }
+    });
+}
+
+rollDiceButton.addEventListener('click', () => {
+    if (canRollDice) {
+        rollDiceButton.style.display = 'none';
+        showDicePopup();
+        canRollDice = false;
     }
-
-    function displayDiceRollResult(rolledPlayerId, roll) {
-        if (diceResultDiv) {
-            const playerName = playersInLobby.find(p => p.playerId === rolledPlayerId)?.username || 'Someone';
-            diceResultDiv.textContent = rolledPlayerId === playerId ? `You rolled a ${roll}` : `${playerName} rolled a ${roll}`;
-        }
-    }
-
-    function displayTriviaQuestion(questionText) {
-        if (triviaQuestionDiv) {
-            triviaQuestionDiv.textContent = questionText;
-        }
-    }
-
-    function displayTriviaResult(isCorrect, correctAnswer) {
-        if (triviaResultDiv) {
-            triviaResultDiv.textContent = isCorrect ? 'Correct!' : `Incorrect. The answer was: ${correctAnswer}`;
-        }
-    }
-
-    function handlePlayerWon(winnerId) {
-        if (finishMessageDiv) {
-            const winnerName = playersInLobby.find(p => p.playerId === winnerId)?.username || 'Someone';
-            finishMessageDiv.textContent = winnerId === playerId ? 'You Won!' : `${winnerName} won!`;
-            finishMessageDiv.style.display = 'block';
-        }
-        if (rollDiceButton) rollDiceButton.disabled = true;
-        if (submitAnswerButton) submitAnswerButton.disabled = true;
-    }
-
-    function updatePlayerPosition(currentPlayerId, roll) {
-        const currentPlayerIndex = playersInLobby.findIndex(p => p.playerId === currentPlayerId);
-        if (currentPlayerIndex === -1) return;
-
-        const currentPosition = playerPositions[currentPlayerId] || 0;
-        const boardLength = gameBoardLayout.length;
-        let newPosition = (currentPosition + roll) % boardLength;
-        if (newPosition < 0) {
-            newPosition += boardLength;
-        }
-
-        playerPositions[currentPlayerId] = newPosition;
-
-        ws.send(JSON.stringify({
-            type: 'updatePosition',
-            playerId: currentPlayerId,
-            newPosition: newPosition,
-            playerPositions: playerPositions
-        }));
-
-        updateBoard(playerPositions, boardContainer);
-        updateLeaderboard(playerPositions, playersInLobby, leaderboardUl);
-    }
-
-    if (rollDiceButton) {
-        rollDiceButton.addEventListener('click', () => {
-            ws.send(JSON.stringify({ type: 'rollDice', playerId: playerId }));
-            rollDiceButton.disabled = true;
-        });
-    }
-
-    if (submitAnswerButton) {
-        submitAnswerButton.addEventListener('click', () => {
-            const answer = triviaAnswerInput.value.trim();
-            if (answer && triviaQuestionDiv.textContent) {
-                ws.send(JSON.stringify({ type: 'answerTrivia', playerId: playerId, answer: answer }));
-                triviaAnswerInput.value = '';
-                submitAnswerButton.disabled = true;
-            }
-        });
-    }
-
-    if (newGameButton) {
-        newGameButton.addEventListener('click', () => {
-            localStorage.removeItem('gameCode');
-            localStorage.removeItem('boardLayout');
-            localStorage.removeItem('initialPositions');
-            localStorage.removeItem('playerOrder');
-            localStorage.removeItem('currentPlayerId');
-            window.location.href = 'index.html';
-        });
-    }
-
-    connectWebSocket();
-    initializeBoard(gameBoardLayout, boardContainer);
-    updateLeaderboard(playerPositions, playersInLobby, leaderboardUl);
-    updateRollDiceButtonState();
 });
+
+function showDicePopup() {
+    dicePopup.style.display = 'block';
+    diceRoller.textContent = '';
+    let counter = 0;
+    diceInterval = setInterval(() => {
+        diceRoller.textContent = Math.floor(Math.random() * 10) + 1;
+        counter++;
+        if (counter >= 10) { // Approximately 1 second
+            clearInterval(diceInterval);
+        }
+    }, 100);
+}
+
+stopDiceButton.addEventListener('click', () => {
+    if (diceInterval) {
+        clearInterval(diceInterval);
+        currentDiceRoll = parseInt(diceRoller.textContent);
+        setTimeout(() => {
+            dicePopup.style.display = 'none';
+            sendDiceRoll(currentDiceRoll);
+        }, 1000);
+    }
+});
+
+function sendDiceRoll(roll) {
+    const payload = {
+        type: 'rollDice',
+        playerId: playerId,
+        roll: roll
+    };
+    ws.send(JSON.stringify(payload));
+}
+
+function showTriviaPopup(questionText) {
+    triviaPopup.style.display = 'block';
+    triviaQuestion.textContent = questionText;
+    // In a real game, you'd fetch image and choices from the server
+    const choices = ["Choice A", "Correct Choice", "Choice C", "Choice D"]; // Placeholder
+    shuffleArray(choices);
+    document.querySelectorAll('#trivia-choices button').forEach((button, index) => {
+        button.textContent = choices[index];
+        button.onclick = () => handleTriviaAnswer(choices[index]);
+    });
+}
+
+function handleTriviaAnswer(answer) {
+    triviaPopup.style.display = 'none';
+    const payload = {
+        type: 'answerTrivia',
+        playerId: playerId,
+        answer: answer
+    };
+    ws.send(JSON.stringify(payload));
+}
+
+function showResultPopup(isCorrect, correctAnswer) {
+    resultMessage.textContent = isCorrect ? 'Correct!' : `Incorrect. The correct answer was: ${correctAnswer}`;
+    resultPopup.style.display = 'block';
+    setTimeout(() => {
+        resultPopup.style.display = 'none';
+    }, 2000); // Show result for 2 seconds
+}
+
+function showFinishPopup(message) {
+    finishText.textContent = message;
+    finishPopup.style.display = 'block';
+}
+
+newGameButton.addEventListener('click', () => {
+    window.location.href = 'index.html';
+});
+
+function updateCurrentPlayerDisplay() {
+    const currentPlayer = playerOrder.find(id => id === currentPlayerId);
+    const playerIndex = playerOrder.indexOf(currentPlayer) + 1;
+    currentPlayerDisplay.textContent = `Current Player: Player ${playerIndex}`;
+}
+
+// Utility function to shuffle an array
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+}
+
+connectWebSocket();
+
+// Ensure the game screen is shown
+gameScreen.style.display = 'block';
