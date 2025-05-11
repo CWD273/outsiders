@@ -90,3 +90,153 @@ function handleWebSocketMessage(event) {
 
 function renderBoard(board) {
     boardContainer.innerHTML = '';
+    for (let i = 0; i < board.length; i++) {
+        const square = document.createElement('div');
+        square.classList.add('square');
+        square.textContent = board[i].index + 1;
+        if (board[i].isTrivia) {
+            square.classList.add('trivia-square');
+        }
+        if (i === 0) {
+            square.classList.add('start-square');
+            square.textContent = 'Start';
+        }
+        if (i === board.length - 1) {
+            square.classList.add('finish-square');
+            square.textContent = 'Finish';
+        }
+        boardContainer.appendChild(square);
+    }
+}
+
+function updatePlayerPositions(positions) {
+    playerPositions = positions;
+    const squares = document.querySelectorAll('#board-container .square');
+    squares.forEach(square => {
+        // Remove previous player pieces
+        const pieces = square.querySelectorAll('.player-piece');
+        pieces.forEach(piece => piece.remove());
+
+        // Add current player pieces
+        for (const pId in positions) {
+            const position = positions[pId];
+            if (boardLayout && position >= 0 && position < boardLayout.length && squares[position]) {
+                const player = playerOrder.find(id => id.toString() === pId);
+                const playerIndex = playerOrder.indexOf(parseInt(pId));
+                const piece = document.createElement('div');
+                piece.classList.add('player-piece');
+                piece.style.backgroundColor = pieceColor; // Use the stored color
+                piece.textContent = playerIndex + 1; // Show player number
+                squares[position].appendChild(piece);
+
+                // Basic stacking logic (adjust as needed for more than a few players)
+                const existingPieces = squares[position].querySelectorAll('.player-piece');
+                if (existingPieces.length > 1) {
+                    const offset = (existingPieces.length - 1) * 5;
+                    piece.style.left = `${10 + offset}px`;
+                    piece.style.top = `${10 + offset}px`;
+                }
+            }
+        }
+    });
+}
+
+rollDiceButton.addEventListener('click', () => {
+    if (canRollDice) {
+        rollDiceButton.style.display = 'none';
+        showDicePopup();
+        canRollDice = false;
+    }
+});
+
+function showDicePopup() {
+    dicePopup.style.display = 'block';
+    diceRoller.textContent = '';
+    let counter = 0;
+    diceInterval = setInterval(() => {
+        diceRoller.textContent = Math.floor(Math.random() * 10) + 1;
+        counter++;
+        if (counter >= 10) { // Approximately 1 second
+            clearInterval(diceInterval);
+        }
+    }, 100);
+}
+
+stopDiceButton.addEventListener('click', () => {
+    if (diceInterval) {
+        clearInterval(diceInterval);
+        currentDiceRoll = parseInt(diceRoller.textContent);
+        setTimeout(() => {
+            dicePopup.style.display = 'none';
+            sendDiceRoll(currentDiceRoll);
+        }, 1000);
+    }
+});
+
+function sendDiceRoll(roll) {
+    const payload = {
+        type: 'rollDice',
+        playerId: playerId,
+        roll: roll
+    };
+    ws.send(JSON.stringify(payload));
+}
+
+function showTriviaPopup(questionText, choices, image) {
+    triviaPopup.style.display = 'block';
+    triviaQuestion.textContent = questionText;
+    triviaImage.src = image || ''; // Set the image source
+    triviaImage.style.display = image ? 'block' : 'none'; // Show/hide image if URL exists
+
+    document.querySelectorAll('#trivia-choices button').forEach((button, index) => {
+        button.textContent = choices[index];
+        button.onclick = () => handleTriviaAnswer(choices[index]);
+    });
+}
+
+function handleTriviaAnswer(answer) {
+    triviaPopup.style.display = 'none';
+    const payload = {
+        type: 'answerTrivia',
+        playerId: playerId,
+        answer: answer
+    };
+    ws.send(JSON.stringify(payload));
+}
+
+function showResultPopup(isCorrect, correctAnswer) {
+    resultMessage.textContent = isCorrect ? 'Correct!' : `Incorrect. The correct answer was: ${correctAnswer}`;
+    resultPopup.style.display = 'block';
+    setTimeout(() => {
+        resultPopup.style.display = 'none';
+    }, 2000); // Show result for 2 seconds
+}
+
+function showFinishPopup(message) {
+    finishText.textContent = message;
+    finishPopup.style.display = 'block';
+}
+
+newGameButton.addEventListener('click', () => {
+    window.location.href = 'index.html';
+});
+
+function updateCurrentPlayerDisplay() {
+    const currentPlayer = playerOrder.find(id => id === currentPlayerId);
+    const playerIndex = playerOrder.indexOf(currentPlayer) + 1;
+    currentPlayerDisplay.textContent = `Current Player: Player ${playerIndex}`;
+}
+
+// Utility function to shuffle an array (moved here for client-side use if needed later)
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+}
+
+connectWebSocket();
+
+// Ensure the game screen is shown
+gameScreen.style.display = 'block';
