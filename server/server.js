@@ -70,7 +70,7 @@ wss.on('connection', ws => {
                 handleStartGame(ws, data);
                 break;
             case 'rollDice':
-                handleRollDice(ws,data);
+                handleRollDice(ws, data);
                 break;
             case 'answerTrivia':
                 handleAnswerTrivia(ws, data);
@@ -102,13 +102,13 @@ function handleCreateGame(ws, data) {
     lobbies[gameCode] = {
         players: [],
         gameStarted: false,
-        board: createGameBoard(),
+        board: createGameBoard(), // Board is now directly in the lobby state
         currentPlayerIndex: 0,
         usedQuestionIndices: [],
         currentQuestion: null,
         // ... other game state
     };
-    joinLobby(ws, gameCode, data.username, data.pieceColor, true); // Creator joins immediately
+    joinLobby(ws, gameCode, data.username, data.pieceColor, true);
 }
 
 function handleJoinGame(ws, data) {
@@ -175,16 +175,24 @@ function handleStartGame(ws, data) {
             return acc;
         }, {});
         const playerOrder = lobby.players.map(p => p.playerId);
-        lobby.players.forEach(player => {
-            player.ws.send(JSON.stringify({ type: 'gameStarted', board: lobby.board, initialPositions, playerOrder }));
-        });
-        sendCurrentPlayerTurn(gameCode);
+        broadcastGameStart(gameCode, lobby.board, initialPositions, playerOrder); // Pass playerOrder
     } else {
         console.log('Start Game conditions not met for lobby:', gameCode,
             'Lobby exists:', !!lobby,
             'Players > 1:', lobby?.players.length > 1,
             'Is creator:', lobby?.players.find(p => p.ws === ws) ? true : false
         );
+    }
+}
+
+function broadcastGameStart(gameCode, board, initialPositions, playerOrder) {
+    console.log('Broadcasting game start for game:', gameCode);
+    const lobby = lobbies[gameCode];
+    if (lobby) {
+        lobby.players.forEach(player => {
+            player.ws.send(JSON.stringify({ type: 'gameStarted', board: board, initialPositions: initialPositions.reduce((acc, curr) => { acc[curr.playerId] = curr.position; return acc; }, {}), playerOrder: playerOrder }));
+        });
+        sendCurrentPlayerTurn(gameCode);
     }
 }
 
