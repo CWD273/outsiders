@@ -3,39 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trivia Board Game </title>
+    <title>Trivia Board Game - Game</title>
+    <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/game.css">
+    <style>
+        #dice-popup, #trivia-popup, #result-popup, #finish-popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            z-index: 1000;
+        }
+
+        #dice-roller {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .choice-button {
+            padding: 8px 15px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+
+        .choice-button:hover {
+            background-color: #0056b3;
+        }
+    </style>
 </head>
 <body>
-    <div id="game-area"> <div id="leaderboard-container">
-            <h3>Leaderboard</h3>
-            <ul id="player-list">
-            </ul>
-        </div>
-
+    <div id="game-screen">
+        <h2>Trivia Game</h2>
         <div id="board-container">
+            </div>
+        <div id="game-controls">
+            <button id="roll-dice-button" style="display: none;">Roll Dice</button>
+            <div id="current-player"></div>
         </div>
 
-        <div id="game-controls">
-            <div id="dice-area">
-                <button id="roll-dice-button" disabled>Roll Dice</button>
-                <div id="dice-result"></div>
-            </div>
+        <div id="dice-popup">
+            <h3>Roll the Dice!</h3>
+            <div id="dice-roller"></div>
+            <button id="stop-dice-button">Stop</button>
+        </div>
 
-            <div id="trivia-container">
-                <div id="trivia-question"></div>
-                <input type="text" id="trivia-answer" placeholder="Your Answer">
-                <button id="submit-answer-button">Submit Answer</button>
-                <div id="trivia-result-message"></div>
+        <div id="trivia-popup">
+            <h3>Trivia Question</h3>
+            <img id="trivia-image" src="" alt="Trivia Image" style="max-width: 100px; max-height: 100px; margin-bottom: 10px;">
+            <p id="trivia-question"></p>
+            <div id="trivia-choices">
+                <button class="choice-button" data-choice="0"></button>
+                <button class="choice-button" data-choice="1"></button>
+                <button class="choice-button" data-choice="2"></button>
+                <button class="choice-button" data-choice="3"></button>
             </div>
+        </div>
 
-            <div id="finish-message" style="display: none;">
-            </div>
+        <div id="result-popup">
+            <p id="result-message"></p>
+        </div>
 
-            <div id="podium">
-            </div>
-
-            <button id="new-game-button" style="margin-top: 20px;">New Game</button>
+        <div id="finish-popup">
+            <h2 id="finish-text"></h2>
+            <button id="new-game-button">New Game</button>
         </div>
     </div>
 
