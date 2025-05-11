@@ -1,203 +1,45 @@
-/* css/game.css */
-
-body {
-    font-family: sans-serif;
-    min-height: 100vh;
-    margin: 20px;
-    background-color: #f5f5f5;
-    /* If you want the main sections to be in a row, apply flex to body */
-    /* display: flex;
-    justify-content: center; /* Adjust as needed */
-    /* align-items: flex-start; /* Adjust as needed */
-}
-
-#game-area {
-    display: flex; /* Enable Flexbox for the main game area */
-    flex-direction: row; /* Arrange items in a row (horizontally) */
-    justify-content: space-around; /* Distribute space around items */
-    align-items: flex-start; /* Align items to the top */
-    max-width: 1200px; /* Example max width for the game area */
-    margin: 0 auto; /* Center the game area on the page */
-}
-
-#leaderboard-container {
-    width: 200px;
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    background-color: white;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    flex-shrink: 0; /* Prevent shrinking */
-}
-
-#leaderboard-container h3 {
-    margin-top: 0;
-}
-
-#player-list {
-    list-style: none;
-    padding: 0;
-}
-
-#player-list li {
-    margin-bottom: 5px;
-}
-
+/* client/css/game.css */
 #board-container {
     display: grid;
-    grid-template-columns: repeat(10, 1fr);
-    width: 550px;
-    height: 550px;
-    border: 1px solid #aaa;
-    border-radius: 8px;
-    background-color: #e0e0e0;
-    gap: 5px;
-    position: relative;
-    flex-grow: 1; /* Allow it to take up available space */
-    margin: 0 20px; /* Add some horizontal margin */
+    grid-template-columns: repeat(12, 1fr); /* 12 columns for 120 squares */
+    width: 600px; /* Adjust as needed */
+    height: 500px; /* Adjust as needed */
+    margin: 20px auto;
+    border: 1px solid #ccc;
 }
 
 .square {
+    border: 1px solid #eee;
+    height: calc(500px / 10); /* Adjust height based on total height and rows */
+    width: calc(600px / 12); /* Adjust width based on total width and columns */
     display: flex;
     justify-content: center;
     align-items: center;
-    border: 1px solid #eee;
-    font-size: 0.8em;
-    background-color: #f9f9f9;
-    border-radius: 4px;
+    font-size: 0.7em;
+    position: relative; /* For positioning player pieces */
 }
 
-.special-square {
-    background-color: lightblue;
+.trivia-square {
+    background-color: lightcoral;
 }
 
 .start-square {
     background-color: lightgreen;
-    font-weight: bold;
 }
 
 .finish-square {
-    background-color: lightcoral;
-    font-weight: bold;
+    background-color: gold;
 }
 
 .player-piece {
-    width: 20px;
-    height: 20px;
     border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    background-color: blue; /* Default, will be set by player color */
     color: white;
-    font-size: 0.6em;
+    font-size: 0.8em;
     display: flex;
     justify-content: center;
     align-items: center;
     position: absolute;
-    z-index: 10;
-}
-
-#game-controls {
-    width: 250px;
-    padding: 15px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    background-color: white;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    flex-shrink: 0; /* Prevent shrinking */
-}
-
-#dice-area {
-    margin-bottom: 10px;
-    text-align: center;
-}
-
-#dice-result {
-    margin-top: 5px;
-    font-weight: bold;
-}
-
-#trivia-container {
-    margin-top: 10px;
-    text-align: center;
-}
-
-#trivia-question {
-    padding: 10px;
-    margin-bottom: 10px;
-    background-color: #f0f8ff;
-    border: 1px solid #add8e6;
-    border-radius: 4px;
-}
-
-#trivia-answer {
-    padding: 8px;
-    margin-bottom: 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    width: 80%;
-}
-
-#submit-answer-button {
-    padding: 10px 15px;
-    border: none;
-    border-radius: 4px;
-    background-color: #007bff;
-    color: white;
-    cursor: pointer;
-}
-
-#submit-answer-button:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
-}
-
-#trivia-result-message {
-    margin-top: 10px;
-    font-weight: bold;
-}
-
-#finish-message {
-    margin-top: 20px;
-    padding: 15px;
-    background-color: #d4edda;
-    color: #155724;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    font-weight: bold;
-    text-align: center;
-    display: none;
-}
-
-#podium {
-    display: flex;
-    justify-content: space-around;
-    align-items: flex-end;
-    margin-top: 20px;
-}
-
-.podium-place {
-    text-align: center;
-}
-
-.podium-piece {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    margin-bottom: 5px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    color: white;
-    font-weight: bold;
-}
-
-#new-game-button {
-    margin-top: 20px;
-    padding: 10px 20px;
-    border: none;
-    border-radius: 4px;
-    background-color: #28a745;
-    color: white;
-    cursor: pointer;
 }
